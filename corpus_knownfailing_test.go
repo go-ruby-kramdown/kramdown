@@ -66,12 +66,11 @@ var knownFailing = map[string]bool{
 	"block/13_definition_list/item_ial.text":    true,
 	"block/13_definition_list/with_blocks.text": true,
 
-	// block/14_table (5)
-	"block/14_table/errors.text":              true,
-	"block/14_table/escaping.text":            true,
-	"block/14_table/footer.text":              true,
-	"block/14_table/simple.text":              true,
-	"block/14_table/table_with_footnote.text": true,
+	// block/14_table (4)
+	"block/14_table/errors.text":   true,
+	"block/14_table/escaping.text": true,
+	"block/14_table/footer.text":   true,
+	"block/14_table/simple.text":   true,
 
 	// encoding.text (1)
 	"encoding.text": true,

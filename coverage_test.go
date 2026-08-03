@@ -199,10 +199,12 @@ func TestTableSectionsAndAlign(t *testing.T) {
 }
 
 // TestIsTableSepRejections covers isTableSepLine's empty/non-dash/illegal-char
-// rejections.
+// rejections. A leading-pipe block with no separator line at all is, like the
+// gem, a headerless <tbody>-only table; the non-dash rows exercise the
+// separator-line rejection path.
 func TestIsTableSepRejections(t *testing.T) {
-	// A "table-like" first row whose second line has a forbidden char is no table.
-	eq(t, "| a |\n| x |\n", "<p>| a |\n| x |</p>\n")
+	eq(t, "| a |\n| x |\n",
+		"<table>\n  <tbody>\n    <tr>\n      <td>a</td>\n    </tr>\n    <tr>\n      <td>x</td>\n    </tr>\n  </tbody>\n</table>\n")
 }
 
 // TestCodespanEdges covers an empty code span and a multi-backtick span with a

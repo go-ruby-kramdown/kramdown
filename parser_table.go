@@ -54,8 +54,17 @@ func (p *parser) tryTable(lines []string, start int) (*Element, int) {
 			break
 		}
 	}
+	// kramdown recognises a table with no separator at all when the first line
+	// begins (after up to three spaces) with a pipe; every row is then a <tbody>
+	// row and there is no header. Without a leading pipe a separator is required.
 	if sepIdx < 0 {
-		return nil, 0
+		// A separator-less table is only recognised when the first line starts with a
+		// pipe AND no line is a separator: a stray separator below the first rows
+		// makes kramdown treat the whole block as a paragraph instead.
+		if !startsWithTablePipe(lines[start]) || blockHasSeparator(block) {
+			return nil, 0
+		}
+		return p.bodyOnlyTable(block, start, end)
 	}
 
 	tbl := newEl(ElTable)
@@ -126,6 +135,38 @@ func (p *parser) tryTable(lines []string, start int) (*Element, int) {
 	if len(tbody.Children) > 0 {
 		tbl.addChild(tbody)
 	}
+	return tbl, end - start
+}
+
+// startsWithTablePipe reports whether a line begins, after up to three leading
+// spaces, with a pipe — kramdown's trigger for a separator-less table.
+func startsWithTablePipe(line string) bool {
+	t := strings.TrimLeft(line, " ")
+	return len(line)-len(t) <= 3 && strings.HasPrefix(t, "|")
+}
+
+// blockHasSeparator reports whether any line of the block is a table separator.
+func blockHasSeparator(block []string) bool {
+	for _, l := range block {
+		if isTableSepLine(l) {
+			return true
+		}
+	}
+	return false
+}
+
+// bodyOnlyTable builds a headerless table (every row a <tbody> row) for a block
+// whose first line starts with a pipe and that has no separator line.
+func (p *parser) bodyOnlyTable(block []string, start, end int) (*Element, int) {
+	tbl := newEl(ElTable)
+	tbody := newEl(ElTbody)
+	for _, line := range block {
+		row := p.tableRow(line, false, nil)
+		tr := newEl(ElTr)
+		tr.Children = row.Children
+		tbody.addChild(tr)
+	}
+	tbl.addChild(tbody)
 	return tbl, end - start
 }
 
