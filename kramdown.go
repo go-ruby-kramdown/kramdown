@@ -23,17 +23,28 @@ type Options struct {
 	HardWrap bool
 	// FootnoteNr is the starting number for footnotes (default 1).
 	FootnoteNr int
+	// FootnotePrefix is inserted between the "fn:"/"fnref:" marker and the footnote
+	// name in every footnote id (default "").
+	FootnotePrefix string
+	// FootnoteBacklink is the (HTML-text-escaped) content of each reverse-footnote
+	// link; the empty string suppresses back-links entirely (default "&#8617;").
+	FootnoteBacklink string
+	// FootnoteLinkText is a format string for the footnote reference's link text,
+	// with "%s" replaced by the footnote number; empty means the bare number
+	// (default "").
+	FootnoteLinkText string
 }
 
 // DefaultOptions returns the option set matching kramdown's own defaults, used
 // when New is called with a nil option pointer.
 func DefaultOptions() Options {
 	return Options{
-		AutoIds:     true,
-		SmartQuotes: true,
-		Typographic: true,
-		HardWrap:    true,
-		FootnoteNr:  1,
+		AutoIds:          true,
+		SmartQuotes:      true,
+		Typographic:      true,
+		HardWrap:         true,
+		FootnoteNr:       1,
+		FootnoteBacklink: "&#8617;",
 	}
 }
 

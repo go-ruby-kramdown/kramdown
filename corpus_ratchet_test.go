@@ -63,6 +63,12 @@ func applyCorpusOptions(o Options, text string) Options {
 			o.HardWrap = val == "true"
 		case "smart_quotes":
 			o.SmartQuotes = val != "false"
+		case "footnote_prefix":
+			o.FootnotePrefix = val
+		case "footnote_backlink":
+			o.FootnoteBacklink = val
+		case "footnote_link_text":
+			o.FootnoteLinkText = val
 		}
 	}
 	return o
