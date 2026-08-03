@@ -138,6 +138,9 @@ func TestAutolinksAndRawHTML(t *testing.T) {
 	eq(t, "a <span>b</span> c\n", "<p>a <span>b</span> c</p>\n")
 	// A bare "<" that is neither autolink nor tag is escaped.
 	eq(t, "a < b\n", "<p>a &lt; b</p>\n")
+	// A bracketed construct is not an email autolink: the "<" stays literal and the
+	// inner markdown link is parsed.
+	eq(t, "<[x](y)>\n", "<p>&lt;<a href=\"y\">x</a>&gt;</p>\n")
 }
 
 // TestEscapes covers backslash escapes and the "\\" hard break vs literal cases.

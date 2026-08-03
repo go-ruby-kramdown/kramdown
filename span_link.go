@@ -187,8 +187,11 @@ func unescapeLinkText(s string) string {
 }
 
 var (
-	reAutoURL   = regexp.MustCompile(`^<((?:https?|ftp|mailto):[^>\s]+)>`)
-	reAutoEmail = regexp.MustCompile(`^<([^>\s@]+@[^>\s]+\.[^>\s]+)>`)
+	reAutoURL = regexp.MustCompile(`^<((?:https?|ftp|mailto):[^>\s]+)>`)
+	// An email autolink's address excludes brackets and parentheses, so a bracketed
+	// construct like <[a](b)> is left literal (and its inner markdown link parsed),
+	// matching kramdown 2.5.2.
+	reAutoEmail = regexp.MustCompile(`^<([^>\s@()\[\]]+@[^>\s()\[\]]+\.[^>\s()\[\]]+)>`)
 	reHTMLSpan  = regexp.MustCompile(`^<(/?[a-zA-Z][a-zA-Z0-9]*(?:\s[^>]*)?/?)>`)
 )
 
