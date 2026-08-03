@@ -42,24 +42,24 @@ func (c *htmlConverter) convert() string {
 	return out
 }
 
-// convertChildren renders a sequence of block elements at the given indent level,
-// emitting a blank line between two rendered blocks exactly where the source had a
-// blank-line separator (an ElBlank node).
+// convertChildren renders a sequence of block elements at the given indent level.
+// It mirrors kramdown's converter exactly: every rendered block already ends in a
+// newline, and each blank-line separator (a single ElBlank node, into which the
+// parser collapses any run of blank lines) contributes exactly one "\n" — so a
+// leading, trailing, or all-blank document emits the gem's lone "\n".
 func (c *htmlConverter) convertChildren(els []*Element, b *strings.Builder, indent int) {
-	rendered := false
-	pendingBlank := false
+	prevBlank := false
 	for _, e := range els {
 		if e.Type == ElBlank {
-			if rendered {
-				pendingBlank = true
+			// Collapse a run of blanks (an EOB "^" between blank lines can split one
+			// run into adjacent ElBlank nodes) to the single "\n" kramdown emits.
+			if !prevBlank {
+				b.WriteByte('\n')
 			}
+			prevBlank = true
 			continue
 		}
-		if rendered && pendingBlank {
-			b.WriteByte('\n')
-		}
-		pendingBlank = false
-		rendered = true
+		prevBlank = false
 		c.convertBlock(e, b, indent)
 	}
 }

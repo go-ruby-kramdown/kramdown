@@ -33,7 +33,7 @@ func TestEscapeBranches(t *testing.T) {
 func TestHTMLConverterEdges(t *testing.T) {
 	// A document beginning with blank lines (leading ElBlank with nothing rendered
 	// yet) then a paragraph.
-	eq(t, "\n\nx\n", "<p>x</p>\n")
+	eq(t, "\n\nx\n", "\n<p>x</p>\n")
 	// An empty list item (a marker with no content) renders <li></li>.
 	eq(t, "*  \n* b\n", "<ul>\n  <li></li>\n  <li>b</li>\n</ul>\n")
 	// A table cell that is empty.
