@@ -227,6 +227,20 @@ func TestThreeTightItems(t *testing.T) {
 	eq(t, "* a\n* b\n* c\n", "<ul>\n  <li>a</li>\n  <li>b</li>\n  <li>c</li>\n</ul>\n")
 }
 
+// TestTableInternals covers two rarely-hit table-parser branches: a code span
+// closed only after an intervening backtick run of a different length, and the
+// strict pipe gate breaking on a multi-line text run whose first line has no pipe
+// after a code span reset the running pipe state.
+func TestTableInternals(t *testing.T) {
+	toks := splitCodespans("`a``b`c")
+	if len(toks) != 2 || !toks[0].code || toks[0].s != "`a``b`" || toks[1].s != "c" {
+		t.Fatalf("splitCodespans mismatched-run: %#v", toks)
+	}
+	if tableBlockHasPipe([]string{"| `a", "b` plain", "c"}) {
+		t.Fatal("expected the strict pipe gate to reject this block")
+	}
+}
+
 // TestHasBlankSep covers hasBlankSep's internal-blank detection (used by the
 // definition-list converter for a description with an interior blank separator).
 func TestHasBlankSep(t *testing.T) {

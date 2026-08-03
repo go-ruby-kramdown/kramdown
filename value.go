@@ -54,10 +54,12 @@ const (
 	ElDD
 	// ElTable is a table; Children are ElThead / ElTbody.
 	ElTable
-	// ElThead / ElTbody / ElTr / ElTd structure a table.
+	// ElThead / ElTbody / ElTfoot / ElTr / ElTd structure a table.
 	ElThead
 	// ElTbody is a table body.
 	ElTbody
+	// ElTfoot is a table footer section.
+	ElTfoot
 	// ElTr is a table row.
 	ElTr
 	// ElTd is a table cell (a <td> or, in a thead, a <th>).
