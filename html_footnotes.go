@@ -20,10 +20,14 @@ func (c *htmlConverter) appendFootnotes(body string) string {
 	b.WriteString(strings.TrimRight(body, "\n"))
 	b.WriteString("\n\n")
 	b.WriteString(`<div class="footnotes" role="doc-endnotes">` + "\n")
-	b.WriteString("  <ol>\n")
+	if c.doc.Opts.FootnoteNr != 1 {
+		b.WriteString(`  <ol start="` + strconv.Itoa(c.doc.Opts.FootnoteNr) + `">` + "\n")
+	} else {
+		b.WriteString("  <ol>\n")
+	}
 	for _, id := range c.footOrder {
 		def := c.footDefs[id]
-		b.WriteString(`    <li id="fn:` + id + `">` + "\n")
+		b.WriteString(`    <li id="fn:` + c.doc.Opts.FootnotePrefix + id + `">` + "\n")
 		c.renderFootnoteBody(def, id, &b)
 		b.WriteString("    </li>\n")
 	}
@@ -59,7 +63,7 @@ func (c *htmlConverter) renderFootnoteBody(def *Element, id string, b *strings.B
 			inner.WriteString("\n")
 		}
 	}
-	if !lastIsP {
+	if !lastIsP && backlink != "" {
 		// Backlink in its own trailing paragraph (no leading NBSP).
 		inner.WriteString(ind(3) + "<p>" + strings.TrimPrefix(backlink, " ") + "</p>\n")
 	}
@@ -69,18 +73,24 @@ func (c *htmlConverter) renderFootnoteBody(def *Element, id string, b *strings.B
 // backlinks builds the "↩" reverse-footnote links, one per reference, with a
 // superscript index for repeats, each separated by a non-breaking space.
 func (c *htmlConverter) backlinks(id string) string {
+	// An empty footnote_backlink suppresses the reverse-footnote links entirely.
+	if c.doc.Opts.FootnoteBacklink == "" {
+		return ""
+	}
+	text := escapeHTMLText(c.doc.Opts.FootnoteBacklink)
 	n := c.footRefs[id]
+	name := c.doc.Opts.FootnotePrefix + id
 	var b strings.Builder
 	for i := 1; i <= n; i++ {
-		fnref := "fnref:" + id
+		fnref := "fnref:" + name
 		if i > 1 {
-			fnref = "fnref:" + id + ":" + strconv.Itoa(i-1)
+			fnref = "fnref:" + name + ":" + strconv.Itoa(i-1)
 		}
 		b.WriteString("\u00a0") // kramdown separates back-links with a real NBSP
 		if i == 1 {
-			fmt.Fprintf(&b, `<a href="#%s" class="reversefootnote" role="doc-backlink">&#8617;</a>`, fnref)
+			fmt.Fprintf(&b, `<a href="#%s" class="reversefootnote" role="doc-backlink">%s</a>`, fnref, text)
 		} else {
-			fmt.Fprintf(&b, `<a href="#%s" class="reversefootnote" role="doc-backlink">&#8617;<sup>%d</sup></a>`, fnref, i)
+			fmt.Fprintf(&b, `<a href="#%s" class="reversefootnote" role="doc-backlink">%s<sup>%d</sup></a>`, fnref, text, i)
 		}
 	}
 	return b.String()

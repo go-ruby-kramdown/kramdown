@@ -96,15 +96,10 @@ var knownFailing = map[string]bool{
 	// span/03_codespan (1)
 	"span/03_codespan/highlighting.text": true,
 
-	// span/04_footnote (8)
-	"span/04_footnote/backlink_inline.text":    true,
-	"span/04_footnote/backlink_text.text":      true,
-	"span/04_footnote/definitions.text":        true,
-	"span/04_footnote/footnote_link_text.text": true,
-	"span/04_footnote/footnote_nr.text":        true,
-	"span/04_footnote/footnote_prefix.text":    true,
-	"span/04_footnote/inside_footnote.text":    true,
-	"span/04_footnote/without_backlink.text":   true,
+	// span/04_footnote (3)
+	"span/04_footnote/backlink_inline.text": true,
+	"span/04_footnote/definitions.text":     true,
+	"span/04_footnote/inside_footnote.text": true,
 
 	// span/abbreviations (3)
 	"span/abbreviations/abbrev.text":         true,

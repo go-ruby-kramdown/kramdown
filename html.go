@@ -436,10 +436,15 @@ func (c *htmlConverter) renderFootnoteRef(e *Element, b *strings.Builder) {
 	}
 	c.footRefs[id]++
 	refIdx := c.footRefs[id]
-	fnref := "fnref:" + id
+	name := c.doc.Opts.FootnotePrefix + id
+	fnref := "fnref:" + name
 	if refIdx > 1 {
-		fnref = "fnref:" + id + ":" + strconv.Itoa(refIdx-1)
+		fnref = "fnref:" + name + ":" + strconv.Itoa(refIdx-1)
 	}
-	fmt.Fprintf(b, `<sup id="%s"><a href="#fn:%s" class="footnote" rel="footnote" role="doc-noteref">%d</a></sup>`,
-		fnref, id, num)
+	linkText := strconv.Itoa(num)
+	if c.doc.Opts.FootnoteLinkText != "" {
+		linkText = strings.ReplaceAll(c.doc.Opts.FootnoteLinkText, "%s", linkText)
+	}
+	fmt.Fprintf(b, `<sup id="%s"><a href="#fn:%s" class="footnote" rel="footnote" role="doc-noteref">%s</a></sup>`,
+		fnref, name, linkText)
 }

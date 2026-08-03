@@ -11,7 +11,7 @@ import (
 
 // reEntity matches an already-formed HTML entity (named, decimal or hex) which is
 // passed through verbatim rather than having its "&" escaped.
-var reEntity = regexp.MustCompile(`&(?:[a-zA-Z][a-zA-Z0-9]*|#[0-9]+|#[xX][0-9a-fA-F]+);`)
+var reEntity = regexp.MustCompile(`&(?:\w+|#[0-9]+|#[xX][0-9a-fA-F]+);`)
 
 // escapeHTMLText escapes text content for HTML, leaving existing entities intact
 // and converting <, >, and bare & the way kramdown does.
