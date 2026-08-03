@@ -1,2 +1,6 @@
 * text=auto eol=lf
 *.go text eol=lf
+# Vendored kramdown corpus: preserve exact bytes (no EOL normalization) so the
+# byte-for-byte ratchet is identical on every platform, and keep it out of the
+# repo's language statistics.
+testdata/testcases/** -text linguist-vendored
