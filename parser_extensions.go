@@ -130,6 +130,40 @@ func (p *parser) applyInlineOptions(attrRaw string) {
 			p.opts.HardWrap = val == "true"
 		case "footnote_prefix":
 			p.opts.FootnotePrefix = val
+		case "syntax_highlighter":
+			p.opts.SyntaxHighlighter = normalizeHighlighter(val)
+		case "syntax_highlighter_opts":
+			applyHighlighterOpts(&p.opts.SyntaxHighlighterOpts, val)
 		}
+	}
+}
+
+// reSHDefaultLang / reSHGuessLang read the two syntax_highlighter_opts keys this
+// port honours out of an inline {::options} Ruby-hash literal such as
+// "{default_lang: ruby, guess_lang: true}".
+var (
+	reSHDefaultLang = regexp.MustCompile(`default_lang:\s*(\w+)`)
+	reSHGuessLang   = regexp.MustCompile(`guess_lang:\s*(true|false)`)
+)
+
+// applyHighlighterOpts folds an inline syntax_highlighter_opts hash literal into o.
+func applyHighlighterOpts(o *SyntaxHighlighterOpts, val string) {
+	if m := reSHDefaultLang.FindStringSubmatch(val); m != nil {
+		o.DefaultLang = m[1]
+	}
+	if m := reSHGuessLang.FindStringSubmatch(val); m != nil {
+		o.GuessLang = m[1] == "true"
+	}
+}
+
+// normalizeHighlighter canonicalises a syntax_highlighter option value: Ruby's nil
+// spellings collapse to "" (highlighting off), everything else is lower-cased so
+// ":rouge"/"rouge" both select Rouge.
+func normalizeHighlighter(val string) string {
+	switch strings.ToLower(strings.TrimPrefix(val, ":")) {
+	case "null", "nil", "~", "":
+		return ""
+	default:
+		return strings.ToLower(strings.TrimPrefix(val, ":"))
 	}
 }

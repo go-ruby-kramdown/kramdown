@@ -29,19 +29,27 @@ var corpusFS embed.FS
 const corpusRoot = "testdata/testcases"
 
 // applyCorpusOptions folds the recognised keys of a kramdown YAML options file
-// into o. It intentionally parses only the flat, top-level scalar keys this port
-// honours; nested blocks (indented lines) and keys it does not model are ignored,
-// which is why cases relying on them stay in the ratchet's knownFailing ledger.
+// into o. It parses the flat, top-level scalar keys this port honours plus the one
+// nested block it models — :syntax_highlighter_opts, whose default_lang/guess_lang
+// scalars and block:/span: {disable} sub-maps drive the Rouge wiring. Keys and
+// nested blocks it does not model are ignored, which is why cases relying on them
+// stay in the ratchet's knownFailing ledger.
 func applyCorpusOptions(o Options, text string) Options {
 	sc := bufio.NewScanner(strings.NewReader(text))
+	inSHOpts := false // inside the :syntax_highlighter_opts subtree
+	subCtx := ""      // "block"/"span" nested map, or "" at the opts' top level
 	for sc.Scan() {
 		line := sc.Text()
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
 		if line[0] == ' ' || line[0] == '\t' {
-			continue // nested value of an unsupported option
+			if inSHOpts {
+				applyCorpusSHOptsLine(&o.SyntaxHighlighterOpts, line, &subCtx)
+			}
+			continue // nested value of an unmodelled option
 		}
+		inSHOpts, subCtx = false, ""
 		line = strings.TrimPrefix(line, ":") // ruby symbol key marker
 		key, val, ok := strings.Cut(line, ":")
 		if !ok {
@@ -69,9 +77,52 @@ func applyCorpusOptions(o Options, text string) Options {
 			o.FootnoteBacklink = val
 		case "footnote_link_text":
 			o.FootnoteLinkText = val
+		case "syntax_highlighter":
+			o.SyntaxHighlighter = normalizeHighlighter(val)
+		case "syntax_highlighter_opts":
+			inSHOpts = true
 		}
 	}
 	return o
+}
+
+// applyCorpusSHOptsLine folds one indented line of a :syntax_highlighter_opts
+// block into o. A key with an empty value (block:/span:) opens a nested map tracked
+// through subCtx; default_lang/guess_lang set the scalar fields; a disable: true
+// under block:/span: flips the corresponding Disable flag. Unmodelled keys (wrap,
+// css, line_numbers, …) are ignored.
+func applyCorpusSHOptsLine(o *SyntaxHighlighterOpts, line string, subCtx *string) {
+	trimmed := strings.TrimSpace(line)
+	// Two-space indent is the opts' top level; deeper indent is inside block:/span:.
+	topLevel := len(line)-len(strings.TrimLeft(line, " ")) <= 2
+	key, val, ok := strings.Cut(trimmed, ":")
+	if !ok {
+		return
+	}
+	key = strings.TrimSpace(key)
+	val = strings.TrimSpace(val)
+	if topLevel {
+		*subCtx = ""
+		switch key {
+		case "default_lang":
+			o.DefaultLang = val
+		case "guess_lang":
+			o.GuessLang = val == "true"
+		case "block", "span":
+			if val == "" {
+				*subCtx = key
+			}
+		}
+		return
+	}
+	if key == "disable" && val == "true" {
+		switch *subCtx {
+		case "block":
+			o.BlockDisable = true
+		case "span":
+			o.SpanDisable = true
+		}
+	}
 }
 
 // resolveCorpusOptions builds the Options for a corpus case, starting from the

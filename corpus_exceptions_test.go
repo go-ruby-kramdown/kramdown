@@ -65,18 +65,16 @@ var corpusExceptions = map[string]bool{
 	"span/text_substitutions/entities_symbolic.text": true,
 	"span/text_substitutions/typography.text":        true,
 
-	// --- highlight (8): Syntax highlighting via rouge / coderay / minted. These delegate to external
-	// Ruby libraries (Rouge, CodeRay) or a LaTeX package (minted) that tokenise code
-	// into nested markup; a pure-Go, no-Ruby-runtime port cannot reproduce their
-	// exact token spans.
-	"block/06_codeblock/guess_lang_css_class.text":      true,
-	"block/06_codeblock/highlighting-opts.text":         true,
-	"block/06_codeblock/highlighting.text":              true,
-	"block/06_codeblock/rouge/multiple.text":            true,
-	"block/06_codeblock/rouge/simple.text":              true,
-	"block/06_codeblock/with_lang_in_fenced_block.text": true,
-	"span/03_codespan/normal-css-class.text":            true,
-	"span/03_codespan/rouge/simple.text":                true,
+	// --- highlight (2): Syntax highlighting cases this port cannot yet close by wiring the
+	// pure-Go go-ruby-rouge highlighter. rouge/simple mixes a Ruby, an HTML and a
+	// PHP block; go-ruby-rouge ships no PHP lexer, so the third block's token spans
+	// cannot be reproduced. rouge/multiple additionally selects a bespoke
+	// RougeHTMLFormatters formatter defined inside kramdown's own Ruby test harness
+	// (it wraps every block in <div class="custom-class">), which no pure-Go wiring
+	// can supply. The remaining rouge cases (block & span highlighting, default_lang,
+	// guess_lang, syntax_highlighter: null, disable flags) now pass via the wiring.
+	"block/06_codeblock/rouge/multiple.text": true,
+	"block/06_codeblock/rouge/simple.text":   true,
 
 	// --- math (5): Math via a math engine. kramdown's default MathJax engine and the itex2mml /
 	// KaTeX engines wrap or transform LaTeX; the exact wrapper markup is

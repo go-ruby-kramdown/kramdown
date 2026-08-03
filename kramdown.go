@@ -34,18 +34,26 @@ type Options struct {
 	// with "%s" replaced by the footnote number; empty means the bare number
 	// (default "").
 	FootnoteLinkText string
+	// SyntaxHighlighter selects the code highlighter. "rouge" (kramdown's default)
+	// routes code blocks/spans through the pure-Go go-ruby-rouge lexers; any other
+	// value ("", "null", "minted", …) leaves them as plain <pre><code>.
+	SyntaxHighlighter string
+	// SyntaxHighlighterOpts carries the highlighter's sub-options (default_lang,
+	// guess_lang, and the block:/span: disable flags).
+	SyntaxHighlighterOpts SyntaxHighlighterOpts
 }
 
 // DefaultOptions returns the option set matching kramdown's own defaults, used
 // when New is called with a nil option pointer.
 func DefaultOptions() Options {
 	return Options{
-		AutoIds:          true,
-		SmartQuotes:      true,
-		Typographic:      true,
-		HardWrap:         false,
-		FootnoteNr:       1,
-		FootnoteBacklink: "&#8617;",
+		AutoIds:           true,
+		SmartQuotes:       true,
+		Typographic:       true,
+		HardWrap:          false,
+		FootnoteNr:        1,
+		FootnoteBacklink:  "&#8617;",
+		SyntaxHighlighter: "rouge",
 	}
 }
 

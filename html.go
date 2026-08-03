@@ -154,17 +154,65 @@ func (c *htmlConverter) generateId(raw string) string {
 	return s
 }
 
-// convertCodeblock renders a code block, attaching a language class when set.
+// convertCodeblock renders a code block. When the Rouge highlighter is enabled and
+// resolves a lexer for the block's language, it emits the gem's nested
+// highlighter-rouge markup; otherwise it degrades to the plain <pre><code> form,
+// carrying a language-<x> class on the <code> element.
 func (c *htmlConverter) convertCodeblock(e *Element, b *strings.Builder, indent int) {
 	pad := ind(indent)
-	preAttr := c.attrStr(e)
+	// The fenced info string wins; only when it is absent is a language-<x> class
+	// consumed off the element (matching kramdown's extract_code_language).
+	lang, _ := e.Options["lang"].(string)
+	classExtracted := false
+	if lang == "" {
+		if l := peekLangClass(e); l != "" {
+			lang, classExtracted = l, true
+		}
+	}
+	shOpts := c.doc.Opts.SyntaxHighlighterOpts
+	if c.rougeEnabled() && !shOpts.BlockDisable {
+		hlLang := lang
+		if hlLang == "" {
+			hlLang = shOpts.DefaultLang
+		}
+		if inner, langClass, ok := c.rougeHighlight(e.Value, hlLang, shOpts.GuessLang); ok {
+			b.WriteString(pad + `<div class="` + langClass + `highlighter-rouge"><div class="highlight"><pre class="highlight"><code>`)
+			b.WriteString(inner)
+			b.WriteString("</code></pre>\n</div></div>\n")
+			return
+		}
+	}
+	preAttr := c.codeblockPreAttr(e, classExtracted, lang)
 	codeAttr := ""
-	if lang, ok := e.Options["lang"].(string); ok && lang != "" {
+	if lang != "" {
 		codeAttr = ` class="language-` + escapeHTMLAttr(lang) + `"`
 	}
 	b.WriteString(pad + "<pre" + preAttr + "><code" + codeAttr + ">")
 	b.WriteString(escapeHTMLText(e.Value))
 	b.WriteString("</code></pre>\n")
+}
+
+// codeblockPreAttr renders a code block's <pre> attributes. When the language was
+// consumed from the class attribute (fenced info string absent), that language-<x>
+// token is removed from the emitted class — it moves to the <code> element — and an
+// emptied class attribute is dropped entirely.
+func (c *htmlConverter) codeblockPreAttr(e *Element, stripLang bool, lang string) string {
+	if !stripLang {
+		return c.attrStr(e)
+	}
+	var b strings.Builder
+	for _, a := range e.Attrs {
+		if a.Name == "class" {
+			cls := stripLangToken(a.Val, lang)
+			if cls == "" {
+				continue
+			}
+			b.WriteString(` class="` + escapeHTMLAttr(cls) + `"`)
+			continue
+		}
+		b.WriteString(" " + a.Name + `="` + escapeHTMLAttr(a.Val) + `"`)
+	}
+	return b.String()
 }
 
 // convertList renders a <ul>/<ol>, eliding the <p> wrapper of a tight item's lone
@@ -312,6 +360,25 @@ func (c *htmlConverter) attrStr(e *Element) string {
 	return b.String()
 }
 
+// renderCodespan renders an inline code span. With the Rouge highlighter enabled
+// and a resolvable lexer (from a language-<x> class or a guess) it emits the gem's
+// <code class="language-<x> highlighter-rouge">…spans…</code>; otherwise it renders
+// the plain <code> element, preserving any class attribute unchanged.
+func (c *htmlConverter) renderCodespan(e *Element, b *strings.Builder) {
+	shOpts := c.doc.Opts.SyntaxHighlighterOpts
+	if c.rougeEnabled() && !shOpts.SpanDisable {
+		lang := peekLangClass(e)
+		if lang == "" {
+			lang = shOpts.DefaultLang
+		}
+		if inner, langClass, ok := c.rougeHighlight(e.Value, lang, shOpts.GuessLang); ok {
+			b.WriteString(`<code class="` + langClass + `highlighter-rouge">` + inner + "</code>")
+			return
+		}
+	}
+	b.WriteString("<code" + c.attrStr(e) + ">" + escapeHTMLText(e.Value) + "</code>")
+}
+
 // renderSpans parses and renders e's raw text into inline HTML.
 func (c *htmlConverter) renderSpans(e *Element, indent int) string {
 	raw, _ := e.Options["raw"].(string)
@@ -361,7 +428,7 @@ func (c *htmlConverter) renderSpan(e *Element, b *strings.Builder, indent int) {
 		c.renderSpanEls(e.Children, b, indent)
 		b.WriteString("</strong>")
 	case ElCodespan:
-		b.WriteString("<code" + c.attrStr(e) + ">" + escapeHTMLText(e.Value) + "</code>")
+		c.renderCodespan(e, b)
 	case ElA:
 		c.renderLink(e, b, indent)
 	case ElImg:

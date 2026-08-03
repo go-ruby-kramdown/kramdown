@@ -41,11 +41,10 @@ var knownFailing = map[string]bool{
 	"block/11_ial/nested.text": true,
 	"block/11_ial/simple.text": true,
 
-	// block/12_extension (2)
+	// block/12_extension (1)
 	// options: needs parse_block_html/parse_span_html (the HTML5 front-end).
-	// options3: needs the rouge syntax highlighter's token markup.
-	"block/12_extension/options.text":  true,
-	"block/12_extension/options3.text": true,
+	// (options3, which needed the rouge token markup, now passes via the go-ruby-rouge wiring.)
+	"block/12_extension/options.text": true,
 
 	// block/13_definition_list (3)
 	"block/13_definition_list/auto_ids.text":    true,
@@ -76,9 +75,6 @@ var knownFailing = map[string]bool{
 	"span/02_emphasis/empty.text":   true,
 	"span/02_emphasis/errors.text":  true,
 	"span/02_emphasis/nesting.text": true,
-
-	// span/03_codespan (1)
-	"span/03_codespan/highlighting.text": true,
 
 	// span/04_footnote (3)
 	"span/04_footnote/backlink_inline.text": true,
