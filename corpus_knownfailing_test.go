@@ -85,9 +85,8 @@ var knownFailing = map[string]bool{
 	"span/04_footnote/definitions.text":     true,
 	"span/04_footnote/inside_footnote.text": true,
 
-	// span/abbreviations (3)
+	// span/abbreviations (2)
 	"span/abbreviations/abbrev.text":         true,
-	"span/abbreviations/abbrev_defs.text":    true,
 	"span/abbreviations/abbrev_in_html.text": true,
 
 	// span/autolinks (1)
