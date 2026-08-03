@@ -170,6 +170,8 @@ func TestBlockquote(t *testing.T) {
 	eq(t, "> a\nb\n", "<blockquote>\n  <p>a\nb</p>\n</blockquote>\n")
 	// Nested.
 	eq(t, "> > deep\n", "<blockquote>\n  <blockquote>\n    <p>deep</p>\n  </blockquote>\n</blockquote>\n")
+	// A trailing block IAL attaches to the blockquote, not its inner paragraph.
+	eq(t, "> quoted\n{: #id}\n", "<blockquote id=\"id\">\n  <p>quoted</p>\n</blockquote>\n")
 }
 
 // TestCodeBlocks covers fenced (with/without language), tilde fences, and
