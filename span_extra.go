@@ -60,17 +60,20 @@ func applyAbbreviations(els []*Element, defs map[string]abbrevDef) []*Element {
 	return out
 }
 
-// splitAbbrevText splits a text run into text/abbr elements at every abbreviation
-// occurrence (whitespace in the abbreviation matches any whitespace run).
+// splitAbbrevText splits a text run into text/abbr elements at the first
+// abbreviation occurrence (whitespace in the abbreviation matches any whitespace
+// run). An occurrence must be flanked by non-word characters, matching kramdown's
+// (?<![\w])…(?![\w]) — this holds even for abbreviations ending in punctuation.
 func splitAbbrevText(s string, keys []string, defs map[string]abbrevDef) []*Element {
 	for _, k := range keys {
 		pat := abbrevPattern(k)
-		if loc := pat.FindStringIndex(s); loc != nil && loc[1] > loc[0] {
+		for _, loc := range pat.FindAllStringIndex(s, -1) {
+			if (loc[0] > 0 && isWordByte(s[loc[0]-1])) || (loc[1] < len(s) && isWordByte(s[loc[1]])) {
+				continue // not flanked by non-word characters
+			}
 			var out []*Element
 			if loc[0] > 0 {
-				t := newEl(ElText)
-				t.Value = s[:loc[0]]
-				out = append(out, splitAbbrevText(t.Value, keys, defs)...)
+				out = append(out, splitAbbrevText(s[:loc[0]], keys, defs)...)
 			}
 			ab := newEl(ElAbbr)
 			ab.Value = s[loc[0]:loc[1]]
@@ -90,15 +93,13 @@ func splitAbbrevText(s string, keys []string, defs map[string]abbrevDef) []*Elem
 	return []*Element{t}
 }
 
-// abbrevPattern builds a word-boundary regexp for an abbreviation, allowing any
-// whitespace run where the key has a space (so a line-wrapped abbreviation still
-// matches).
+// abbrevPattern builds the whitespace-flexible body regexp for an abbreviation
+// (any whitespace run matches where the key has a space); token boundaries are
+// enforced separately by the caller.
 func abbrevPattern(k string) *regexp.Regexp {
 	parts := strings.Fields(k)
 	for i := range parts {
 		parts[i] = regexp.QuoteMeta(parts[i])
 	}
-	body := strings.Join(parts, `\s+`)
-	// Word boundaries: kramdown requires the abbreviation to stand as a token.
-	return regexp.MustCompile(`(?:\b|(?:^))` + body + `\b`)
+	return regexp.MustCompile(strings.Join(parts, `\s+`))
 }

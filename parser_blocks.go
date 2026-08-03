@@ -14,6 +14,7 @@ import (
 // parsing) and returns the remaining lines.
 func (p *parser) harvestDefinitions(lines []string) []string {
 	var out []string
+	pendingAbbrevIAL := ""
 	i := 0
 	for i < len(lines) {
 		line := lines[i]
@@ -74,18 +75,34 @@ func (p *parser) harvestDefinitions(lines []string) []string {
 			i++
 			continue
 		}
+		// A standalone block IAL immediately before an abbreviation definition
+		// augments that definition (kramdown attaches it to the abbreviation).
+		if body, ok := matchBlockIAL(line); ok && i+1 < len(lines) &&
+			reAbbrevDef.MatchString(lines[i+1]) {
+			if _, _, isALD := splitALD(body); !isALD {
+				pendingAbbrevIAL = body
+				i++
+				continue
+			}
+		}
 		// Abbreviation definition: "*[text]: title".
 		if m := reAbbrevDef.FindStringSubmatch(line); m != nil {
 			text := m[1]
 			title := strings.TrimSpace(m[2])
 			def := abbrevDef{title: title}
-			// An IAL directly under the definition augments it.
+			var attrs []string
+			if pendingAbbrevIAL != "" {
+				attrs = append(attrs, pendingAbbrevIAL)
+				pendingAbbrevIAL = ""
+			}
+			// An IAL directly under the definition also augments it.
 			if i+1 < len(lines) {
 				if am := reBlockIAL.FindStringSubmatch(strings.TrimRight(lines[i+1], " \t")); am != nil {
-					def.attr = am[1]
+					attrs = append(attrs, am[1])
 					i++
 				}
 			}
+			def.attr = strings.Join(attrs, " ")
 			p.abbrevs[text] = def
 			i++
 			continue
@@ -99,7 +116,7 @@ func (p *parser) harvestDefinitions(lines []string) []string {
 var (
 	reLinkDef      = regexp.MustCompile(`^ {0,3}\[([^\]]+)\]:\s+(\S+)(?:\s+["'(](.*)["')])?\s*$`)
 	reLinkDefTitle = regexp.MustCompile(`^\s+["'(](.*)["')]\s*$`)
-	reAbbrevDef    = regexp.MustCompile(`^\*\[([^\]]+)\]:(.*)$`)
+	reAbbrevDef    = regexp.MustCompile(`^ {0,3}\*\[([^\]]+)\]:(.*)$`)
 	reFootnoteDef  = regexp.MustCompile(`^ {0,3}\[\^([^\]]+)\]:(.*)$`)
 )
 
