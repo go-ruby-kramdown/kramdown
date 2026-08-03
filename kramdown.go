@@ -18,8 +18,9 @@ type Options struct {
 	SmartQuotes bool
 	// Typographic enables the --, ---, ... and <<>> substitutions (default true).
 	Typographic bool
-	// HardWrap, when true (kramdown's default), turns a trailing-two-spaces line
-	// into a hard <br />. When false, only explicit "\\" forces a break.
+	// HardWrap, when true, turns every soft newline into a <br />. Independent of
+	// this, a line ending in two spaces (or "\\") is always a hard break. kramdown's
+	// default is false.
 	HardWrap bool
 	// FootnoteNr is the starting number for footnotes (default 1).
 	FootnoteNr int
@@ -42,7 +43,7 @@ func DefaultOptions() Options {
 		AutoIds:          true,
 		SmartQuotes:      true,
 		Typographic:      true,
-		HardWrap:         true,
+		HardWrap:         false,
 		FootnoteNr:       1,
 		FootnoteBacklink: "&#8617;",
 	}

@@ -241,16 +241,26 @@ func (sp *spanParser) emitText(s string) {
 		}
 		before := s[:idx]
 		trimmed := strings.TrimRight(before, " ")
-		hard := sp.p.opts.HardWrap && len(before)-len(trimmed) >= 2
 		t := newEl(ElText)
-		// In both the hard- and soft-break cases the trailing spaces before the
-		// newline are dropped (kramdown collapses end-of-line whitespace).
-		t.Value = trimmed
-		sp.out = append(sp.out, t)
-		if hard {
+		switch {
+		case len(before)-len(trimmed) >= 2:
+			// Two spaces before the newline are a hard break (kramdown's LINE_BREAK),
+			// independent of hard_wrap: drop exactly those two spaces (keeping any
+			// before them) and render <br />.
+			t.Value = before[:len(before)-2]
+			sp.out = append(sp.out, t)
 			// The <br /> renders its own trailing newline, so don't add another.
 			sp.out = append(sp.out, newEl(ElBr))
-		} else {
+		case sp.p.opts.HardWrap:
+			// hard_wrap turns every newline into a break.
+			t.Value = trimmed
+			sp.out = append(sp.out, t)
+			sp.out = append(sp.out, newEl(ElBr))
+		default:
+			// A soft break keeps the line verbatim (kramdown preserves a lone trailing
+			// space).
+			t.Value = before
+			sp.out = append(sp.out, t)
 			nl := newEl(ElText)
 			nl.Value = "\n"
 			sp.out = append(sp.out, nl)

@@ -244,9 +244,9 @@ func TestInlineOptions(t *testing.T) {
 	if got := h("{::options auto_id_prefix=\"p-\" /}\n\n# Head\n"); !strings.Contains(got, `id="p-head"`) {
 		t.Errorf("auto_id_prefix = %q", got)
 	}
-	// hard_wrap="false" stops a trailing-two-spaces line from becoming a <br />.
-	if got := h("{::options hard_wrap=\"false\" /}\n\na  \nb\n"); strings.Contains(got, "<br") {
-		t.Errorf("hard_wrap off = %q", got)
+	// hard_wrap="true" turns every soft newline into a <br />.
+	if got := h("{::options hard_wrap=\"true\" /}\n\na\nb\n"); !strings.Contains(got, "<br") {
+		t.Errorf("hard_wrap on = %q", got)
 	}
 	// footnote_prefix is inserted into the footnote ids.
 	if got := h("{::options footnote_prefix=\"fp\" /}\n\nx[^a]\n\n[^a]: note\n"); !strings.Contains(got, "fn:fpa") {

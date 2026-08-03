@@ -153,9 +153,13 @@ func TestEscapes(t *testing.T) {
 // TestHardSoftBreaks covers trailing-two-space hard breaks and HardWrap=false.
 func TestBreaks(t *testing.T) {
 	eq(t, "a  \nb\n", "<p>a<br />\nb</p>\n")
-	// HardWrap off: two trailing spaces are a soft break.
-	if got := ToHTML("a  \nb\n", &Options{}); got != "<p>a\nb</p>\n" {
-		t.Errorf("soft break = %q", got)
+	// Two trailing spaces are a hard break regardless of hard_wrap.
+	if got := ToHTML("a  \nb\n", &Options{}); got != "<p>a<br />\nb</p>\n" {
+		t.Errorf("two-space break = %q", got)
+	}
+	// hard_wrap turns every newline into a break.
+	if got := ToHTML("a\nb\n", &Options{HardWrap: true}); got != "<p>a<br />\nb</p>\n" {
+		t.Errorf("hard_wrap = %q", got)
 	}
 }
 
