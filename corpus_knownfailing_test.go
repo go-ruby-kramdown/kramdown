@@ -82,9 +82,6 @@ var knownFailing = map[string]bool{
 	"span/abbreviations/abbrev.text":         true,
 	"span/abbreviations/abbrev_in_html.text": true,
 
-	// span/autolinks (1)
-	"span/autolinks/url_links.text": true,
-
 	// span/extension (1)
 	"span/extension/options.text": true,
 
