@@ -138,12 +138,18 @@ var (
 	reHR         = regexp.MustCompile(`^ {0,3}((\* *){3,}|(- *){3,}|(_ *){3,})$`)
 	reBlockIAL   = regexp.MustCompile(`^\{:(?:: *)?([^}]*)\}\s*$`)
 	reIndentCode = regexp.MustCompile(`^( {4}|\t)`)
-	reFence      = regexp.MustCompile("^(~~~+|```+)\\s*([^`]*?)\\s*$")
-	reULItem     = regexp.MustCompile(`^( {0,3})([*+-])(\s+)(.*)$`)
-	reOLItem     = regexp.MustCompile(`^( {0,3})(\d+)\.(\s+)(.*)$`)
-	reBlockquote = regexp.MustCompile(`^ {0,3}> ?(.*)$`)
-	reHeaderID   = regexp.MustCompile(`[ \t]+\{#([A-Za-z][\w:-]*)\}[ \t]*$`)
-	reDefMarker  = regexp.MustCompile(`^( {0,3})(:)(\s+)(.*)$`)
+	// reLazyCodeJoin folds a lazily-continued (0-3 space) code line onto the
+	// previous line: the newline becomes a single space.
+	reLazyCodeJoin = regexp.MustCompile(`\n( {0,3}\S)`)
+	// reCodeIndentStrip removes one leading indent (a tab or four spaces) from each
+	// code line.
+	reCodeIndentStrip = regexp.MustCompile(`(?m)^(?:\t| {4})`)
+	reFence           = regexp.MustCompile("^(~~~+|```+)\\s*([^`]*?)\\s*$")
+	reULItem          = regexp.MustCompile(`^( {0,3})([*+-])(\s+)(.*)$`)
+	reOLItem          = regexp.MustCompile(`^( {0,3})(\d+)\.(\s+)(.*)$`)
+	reBlockquote      = regexp.MustCompile(`^ {0,3}> ?(.*)$`)
+	reHeaderID        = regexp.MustCompile(`[ \t]+\{#([A-Za-z][\w:-]*)\}[ \t]*$`)
+	reDefMarker       = regexp.MustCompile(`^( {0,3})(:)(\s+)(.*)$`)
 )
 
 // parseOneBlock dispatches on lines[i] to the correct block parser and returns the
@@ -422,39 +428,67 @@ func (p *parser) parseFencedCode(lines []string, start int, parent *Element) int
 // parseIndentedCode handles a run of 4-space-indented lines as a literal code
 // block, including blank lines that sit between indented lines.
 func (p *parser) parseIndentedCode(lines []string, start int, parent *Element) int {
-	var buf []string
+	var raw []string
 	i := start
+	lastContent := false
 	for i < len(lines) {
 		line := lines[i]
-		if reIndentCode.MatchString(line) {
-			buf = append(buf, stripIndent(line, 4))
-			i++
-			continue
-		}
+		// A whitespace-only line is a blank separator even when itself indented four
+		// spaces: it stays in the block only when another indented line follows (the
+		// next group), otherwise it ends the block (and separates it from what comes
+		// after).
 		if strings.TrimSpace(line) == "" {
-			// Lookahead: include the blank only if more indented code follows.
 			j := i
 			for j < len(lines) && strings.TrimSpace(lines[j]) == "" {
 				j++
 			}
-			if j < len(lines) && reIndentCode.MatchString(lines[j]) {
+			if j < len(lines) && reIndentCode.MatchString(lines[j]) && strings.TrimSpace(lines[j]) != "" {
 				for ; i < j; i++ {
-					buf = append(buf, "")
+					raw = append(raw, "")
 				}
+				lastContent = false
 				continue
 			}
 			break
 		}
+		if reIndentCode.MatchString(line) {
+			raw = append(raw, line)
+			i++
+			lastContent = true
+			continue
+		}
+		// Lazy continuation: an under-indented (0-3 space) non-blank line right after
+		// code content is folded into the block, unless it begins an IAL, EOB or HTML
+		// block boundary.
+		if lastContent && !p.isLazyCodeBoundary(line) {
+			raw = append(raw, line)
+			i++
+			continue
+		}
 		break
 	}
-	// Trim trailing blank lines.
-	for len(buf) > 0 && buf[len(buf)-1] == "" {
-		buf = buf[:len(buf)-1]
-	}
+	// Reproduce kramdown's two rewrites: a newline before an under-indented line
+	// becomes a single space (lazy join), then one leading indent is stripped from
+	// every remaining line.
+	text := strings.Join(raw, "\n") + "\n"
+	text = reLazyCodeJoin.ReplaceAllString(text, " $1")
+	text = reCodeIndentStrip.ReplaceAllString(text, "")
 	cb := newEl(ElCodeblock)
-	cb.Value = strings.Join(buf, "\n") + "\n"
+	cb.Value = text
 	parent.addChild(cb)
 	return i - start
+}
+
+// isLazyCodeBoundary reports whether line, appearing where a lazy code-continuation
+// could, instead ends the code block (an IAL, an EOB marker, or an HTML block).
+func (p *parser) isLazyCodeBoundary(line string) bool {
+	if strings.TrimRight(line, " \t") == "^" {
+		return true
+	}
+	if _, ok := matchBlockIAL(line); ok {
+		return true
+	}
+	return isHTMLBlockStart(line)
 }
 
 // stripIndent removes up to n leading spaces (a leading tab counts as a full

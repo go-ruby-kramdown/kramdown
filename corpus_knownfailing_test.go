@@ -25,11 +25,11 @@ var knownFailing = map[string]bool{
 	// block/05_blockquote (1)
 	"block/05_blockquote/lazy.text": true,
 
-	// block/06_codeblock (4)
-	"block/06_codeblock/lazy.text":                true,
-	"block/06_codeblock/no_newline_at_end_1.text": true,
-	"block/06_codeblock/whitespace.text":          true,
-	"block/06_codeblock/with_blank_line.text":     true,
+	// block/06_codeblock (1)
+	// whitespace: the show-whitespaces converter renders literal tabs inside the
+	// code as <span class="ws-tab">\t</span>, but this port expands tabs to spaces
+	// in a global pre-pass, so the literal tab is no longer available.
+	"block/06_codeblock/whitespace.text": true,
 
 	// block/08_list (5)
 	"block/08_list/item_ial.text":            true,
