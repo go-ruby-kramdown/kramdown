@@ -360,15 +360,9 @@ func (p *parser) parseComment(lines []string, start int, parent *Element) int {
 	closed := false
 	for i < len(lines) {
 		line := lines[i]
-		if idx := strings.Index(line, "{:/comment}"); idx >= 0 {
-			if idx > 0 {
-				buf = append(buf, line[:idx])
-			}
-			closed = true
-			i++
-			break
-		}
-		if strings.TrimSpace(line) == "{:/}" {
+		// The block comment closes only on a STANDALONE "{:/comment}" (or the short
+		// "{:/}") line; an inline occurrence within a line is part of the content.
+		if tl := strings.TrimSpace(line); tl == "{:/comment}" || tl == "{:/}" {
 			closed = true
 			i++
 			break
