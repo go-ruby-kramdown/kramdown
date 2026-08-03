@@ -96,6 +96,12 @@ func (c *htmlConverter) convertBlock(e *Element, b *strings.Builder, indent int)
 		b.WriteString(pad + e.Value + "\n")
 	case ElComment:
 		b.WriteString(pad + "<!-- " + e.Value + " -->\n")
+	case ElRaw:
+		// A {::nomarkdown} block emits its content verbatim when its target-format
+		// filter is empty or names html; otherwise it renders nothing.
+		if types, _ := e.Options["types"].([]string); rawForHTML(types) {
+			b.WriteString(e.Value + "\n")
+		}
 	}
 }
 

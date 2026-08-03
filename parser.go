@@ -171,6 +171,9 @@ func (p *parser) parseOneBlock(lines []string, i int, parent *Element) int {
 	if strings.HasPrefix(line, "{::comment}") || strings.HasPrefix(line, "{::comment ") {
 		return p.parseComment(lines, i, parent)
 	}
+	if n, ok := p.parseBlockExtension(lines, i, parent); ok {
+		return n
+	}
 	if isHTMLBlockStart(line) {
 		return p.parseHTMLBlock(lines, i, parent)
 	}
@@ -498,7 +501,8 @@ func (p *parser) parseBlockquote(lines []string, start int, parent *Element) int
 // not an IAL and is excluded so the dedicated extension parser handles it.
 func matchBlockIAL(line string) (string, bool) {
 	t := strings.TrimRight(line, " \t")
-	if strings.HasPrefix(t, "{::") {
+	// "{::…}" extensions and "{:/…}" stop tags are not IALs.
+	if strings.HasPrefix(t, "{::") || strings.HasPrefix(t, "{:/") {
 		return "", false
 	}
 	if m := reBlockIAL.FindStringSubmatch(t); m != nil {

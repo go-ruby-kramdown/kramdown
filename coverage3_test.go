@@ -227,6 +227,27 @@ func TestThreeTightItems(t *testing.T) {
 	eq(t, "* a\n* b\n* c\n", "<ul>\n  <li>a</li>\n  <li>b</li>\n  <li>c</li>\n</ul>\n")
 }
 
+// TestInlineOptions covers the {::options} keys the corpus does not exercise
+// (auto_ids off, auto_id_prefix, hard_wrap off, footnote_prefix).
+func TestInlineOptions(t *testing.T) {
+	// auto_ids="false" suppresses the generated header id.
+	if got := h("{::options auto_ids=\"false\" /}\n\n# Head\n"); strings.Contains(got, "id=") {
+		t.Errorf("auto_ids off = %q", got)
+	}
+	// auto_id_prefix prepends to the generated id.
+	if got := h("{::options auto_id_prefix=\"p-\" /}\n\n# Head\n"); !strings.Contains(got, `id="p-head"`) {
+		t.Errorf("auto_id_prefix = %q", got)
+	}
+	// hard_wrap="false" stops a trailing-two-spaces line from becoming a <br />.
+	if got := h("{::options hard_wrap=\"false\" /}\n\na  \nb\n"); strings.Contains(got, "<br") {
+		t.Errorf("hard_wrap off = %q", got)
+	}
+	// footnote_prefix is inserted into the footnote ids.
+	if got := h("{::options footnote_prefix=\"fp\" /}\n\nx[^a]\n\n[^a]: note\n"); !strings.Contains(got, "fn:fpa") {
+		t.Errorf("footnote_prefix = %q", got)
+	}
+}
+
 // TestTableInternals covers two rarely-hit table-parser branches: a code span
 // closed only after an intervening backtick run of a different length, and the
 // strict pipe gate breaking on a multi-line text run whose first line has no pipe
