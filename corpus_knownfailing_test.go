@@ -31,18 +31,12 @@ var knownFailing = map[string]bool{
 	"block/06_codeblock/whitespace.text":          true,
 	"block/06_codeblock/with_blank_line.text":     true,
 
-	// block/08_list (11)
+	// block/08_list (5)
 	"block/08_list/item_ial.text":            true,
-	"block/08_list/lazy.text":                true,
 	"block/08_list/lazy_and_nested.text":     true,
-	"block/08_list/list_and_hr.text":         true,
 	"block/08_list/list_and_others.text":     true,
 	"block/08_list/mixed.text":               true,
-	"block/08_list/nested.text":              true,
 	"block/08_list/other_first_element.text": true,
-	"block/08_list/simple_ol.text":           true,
-	"block/08_list/simple_ul.text":           true,
-	"block/08_list/special_cases.text":       true,
 
 	// block/10_ald (1)
 	"block/10_ald/simple.text": true,

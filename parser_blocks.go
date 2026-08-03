@@ -139,11 +139,20 @@ func (p *parser) parseList(lines []string, start int, parent *Element) int {
 	i := start
 	loose := false
 	type itemData struct {
-		lines     []string
-		looseItem bool // blank separator seen inside the item
+		lines         []string
+		looseItem     bool // blank separator seen inside the item
+		trailingBlank bool // a blank line separates this item from the next sibling
 	}
 	var items []itemData
+	eobFound := false
 	for i < len(lines) {
+		// A standalone EOB "^" marker terminates the list (kramdown's EOB_MARKER); the
+		// marker itself is left for the surrounding block loop to consume (it renders
+		// nothing), so a following list starts fresh.
+		if strings.TrimRight(lines[i], " \t") == "^" {
+			eobFound = true
+			break
+		}
 		// Skip blank lines between items (they only affect looseness, already
 		// recorded on the preceding item) so a blank-separated sibling continues
 		// the same list rather than starting a new one.
@@ -154,15 +163,31 @@ func (p *parser) parseList(lines []string, start int, parent *Element) int {
 			}
 			nextIsItem := j < len(lines) && ((ordered && reOLItem.MatchString(lines[j])) ||
 				(!ordered && reULItem.MatchString(lines[j])))
-			if nextIsItem {
-				if len(items) > 0 {
-					items[len(items)-1].looseItem = true
-					loose = true
+			// A horizontal rule (kramdown breaks on last_is_blank && HR_START, even
+			// though "* * *" also matches a UL marker) or a lone EOB "^" ends the list,
+			// as does any non-continuation line. In every case the blank line kramdown
+			// consumed belongs to the (now last) item's value, so it carries a trailing
+			// blank that its looseness decision reads.
+			if j >= len(lines) || reHR.MatchString(lines[j]) ||
+				strings.TrimRight(lines[j], " \t") == "^" || !nextIsItem {
+				if j < len(lines) && strings.TrimRight(lines[j], " \t") == "^" {
+					// kramdown consumes the blank into the item then breaks on EOB, and
+					// does NOT re-emit it after the list — skip past it to the marker.
+					eobFound = true
+					i = j
 				}
-				i = j
-				continue
+				if len(items) > 0 {
+					items[len(items)-1].trailingBlank = true
+				}
+				break
 			}
-			break
+			if len(items) > 0 {
+				items[len(items)-1].looseItem = true
+				items[len(items)-1].trailingBlank = true
+				loose = true
+			}
+			i = j
+			continue
 		}
 		line := lines[i]
 		var m []string
@@ -187,6 +212,10 @@ func (p *parser) parseList(lines []string, start int, parent *Element) int {
 		// Gather continuation / nested / paragraph lines for this item.
 		for i < len(lines) {
 			l := lines[i]
+			if strings.TrimRight(l, " \t") == "^" {
+				// EOB marker: end the item (and the list); the outer loop stops too.
+				break
+			}
 			if strings.TrimSpace(l) == "" {
 				// Look past the blank run.
 				j := i
@@ -209,8 +238,11 @@ func (p *parser) parseList(lines []string, start int, parent *Element) int {
 					continue
 				}
 				if nextIsItem {
-					// Blank then a sibling marker: the list stays but this item is loose.
+					// Blank then a sibling marker: the list stays but this item is loose
+					// and carries a trailing blank child (kramdown keeps the blank line in
+					// the item's value, which drives its looseness decision).
 					it.looseItem = true
+					it.trailingBlank = true
 					loose = true
 				}
 				break
@@ -245,7 +277,9 @@ func (p *parser) parseList(lines []string, start int, parent *Element) int {
 			}
 			break
 		}
-		// Trim trailing blank lines in the item.
+		// Trim trailing blank lines in the item; a trailing blank child is (re)added
+		// below once the final trailingBlank state is known (a later loop iteration can
+		// mark this item once it sees the blank that separates it from what follows).
 		for len(it.lines) > 0 && strings.TrimSpace(it.lines[len(it.lines)-1]) == "" {
 			it.lines = it.lines[:len(it.lines)-1]
 		}
@@ -255,18 +289,70 @@ func (p *parser) parseList(lines []string, start int, parent *Element) int {
 	p.inItem = true
 	for _, it := range items {
 		li := newEl(ElLI)
-		p.parseBlocks(it.lines, li)
-		// An item with a trailing/internal blank renders its lone paragraph wrapped
-		// in <p> (the "loose" form).
-		if it.looseItem {
-			li.Options["force_loose"] = true
+		lns := it.lines
+		// A blank line separated this item from what follows: kramdown keeps that
+		// blank in the item's value as a trailing :blank child, which the looseness
+		// rule reads.
+		if it.trailingBlank {
+			lns = append(lns, "")
 		}
+		p.parseBlocks(lns, li)
 		list.addChild(li)
 	}
 	p.inItem = savedInItem
+	finalizeListItems(list, eobFound)
 	list.Options["tight"] = !loose
 	parent.addChild(list)
 	return i - start
+}
+
+// finalizeListItems reproduces kramdown's per-item looseness decision
+// (parser/kramdown/list.rb): the first paragraph of an item is rendered
+// "transparent" (inline, without a <p> wrapper) unless the item is loose. It also
+// pops a trailing :blank child off each item. eobFound reports whether the list was
+// terminated by an EOB ("^") marker, which suppresses the last-item exemption.
+func finalizeListItems(list *Element, eobFound bool) {
+	items := list.Children
+	for idx, li := range items {
+		ch := li.Children
+		if len(ch) == 0 {
+			continue
+		}
+		isLast := idx == len(items)-1
+		// Condition A: first child is a paragraph and it is not immediately followed
+		// by a blank separator — except the very last item may keep a single trailing
+		// blank (unless an EOB marker closed the list).
+		aCond := ch[0].Type == ElP &&
+			(len(ch) < 2 || ch[1].Type != ElBlank ||
+				(isLast && len(ch) == 2 && !eobFound))
+		// Condition B: a non-last item always qualifies; a lone item qualifies; the
+		// last item qualifies only if some earlier item is not a non-transparent
+		// paragraph (i.e. the list is not uniformly loose).
+		bCond := !isLast || len(items) == 1 || anyEarlierQualifies(items[:idx])
+		if aCond && bCond {
+			li.Options["first_transparent"] = true
+		}
+		// Pop a trailing blank child (it becomes a separator after the list, which the
+		// surrounding block stream already emits).
+		if n := len(li.Children); n > 0 && li.Children[n-1].Type == ElBlank {
+			li.Children = li.Children[:n-1]
+		}
+	}
+}
+
+// anyEarlierQualifies is kramdown's list.children[0..-2].any? predicate: an item
+// qualifies if it is empty, its first child is not a paragraph, or its first
+// paragraph is transparent.
+func anyEarlierQualifies(earlier []*Element) bool {
+	for _, li := range earlier {
+		if len(li.Children) == 0 || li.Children[0].Type != ElP {
+			return true
+		}
+		if t, _ := li.Options["first_transparent"].(bool); t {
+			return true
+		}
+	}
+	return false
 }
 
 // tryDefinitionList recognises a definition list: a term line (or several)
