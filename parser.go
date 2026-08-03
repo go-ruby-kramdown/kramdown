@@ -394,14 +394,21 @@ func (p *parser) parseFencedCode(lines []string, start int, parent *Element) int
 	closer := fence[:1]
 	var buf []string
 	i := start + 1
+	closed := false
 	for i < len(lines) {
 		if strings.HasPrefix(lines[i], strings.Repeat(closer, len(fence))) &&
 			strings.TrimSpace(strings.TrimLeft(lines[i], closer)) == "" {
 			i++
+			closed = true
 			break
 		}
 		buf = append(buf, lines[i])
 		i++
+	}
+	if !closed {
+		// A fence that is never closed is not a code block; kramdown reparses the
+		// opening line as ordinary paragraph text.
+		return p.parseParagraph(lines, start, parent)
 	}
 	cb := newEl(ElCodeblock)
 	cb.Value = strings.Join(buf, "\n")

@@ -25,8 +25,7 @@ var knownFailing = map[string]bool{
 	// block/05_blockquote (1)
 	"block/05_blockquote/lazy.text": true,
 
-	// block/06_codeblock (5)
-	"block/06_codeblock/error.text":               true,
+	// block/06_codeblock (4)
 	"block/06_codeblock/lazy.text":                true,
 	"block/06_codeblock/no_newline_at_end_1.text": true,
 	"block/06_codeblock/whitespace.text":          true,
