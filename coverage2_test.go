@@ -94,7 +94,9 @@ func TestTypographyMixedOptions(t *testing.T) {
 // TestParseCommentInlineOpenerText covers parseComment when the opener carries the
 // closer on the same later line via index > 0.
 func TestParseCommentTrailingClose(t *testing.T) {
-	eq(t, "{::comment}\nbody text {:/comment}\n", "<!-- body text -->\n")
+	// A block comment closes on a STANDALONE "{:/comment}" line (an inline closer
+	// on a content line does not terminate the block).
+	eq(t, "{::comment}\nbody text\n{:/comment}\n", "<!-- body text -->\n")
 }
 
 // TestTableNoSeparatorWithinTwo covers tryTable returning nil when no separator is
