@@ -59,11 +59,14 @@ var knownFailing = map[string]bool{
 	"block/13_definition_list/item_ial.text":    true,
 	"block/13_definition_list/with_blocks.text": true,
 
-	// block/14_table (4)
-	"block/14_table/errors.text":   true,
-	"block/14_table/escaping.text": true,
-	"block/14_table/footer.text":   true,
-	"block/14_table/simple.text":   true,
+	// block/14_table (2)
+	// errors: a table directly after a harvested link-reference definition (no
+	// blank line) requires kramdown's after_block_boundary semantics, which this
+	// port's definition pre-pass does not model. simple: one row uses an unclosed
+	// inline <em> HTML element that kramdown auto-closes at the cell boundary
+	// (span-HTML content model), out of scope until the HTML front-end lands.
+	"block/14_table/errors.text": true,
+	"block/14_table/simple.text": true,
 
 	// encoding.text (1)
 	"encoding.text": true,

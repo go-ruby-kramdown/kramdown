@@ -36,9 +36,9 @@ func TestHTMLConverterEdges(t *testing.T) {
 	eq(t, "\n\nx\n", "\n<p>x</p>\n")
 	// An empty list item (a marker with no content) renders <li></li>.
 	eq(t, "*  \n* b\n", "<ul>\n  <li></li>\n  <li>b</li>\n</ul>\n")
-	// A table cell that is empty.
+	// An empty table cell renders as a non-breaking space (matching the gem).
 	got := h("| a |  |\n|---|---|\n| 1 | 2 |\n")
-	if !strings.Contains(got, "<th></th>") {
+	if !strings.Contains(got, "<th>\u00a0</th>") {
 		t.Errorf("empty cell = %q", got)
 	}
 	// An image with an IAL class merges the extra attribute after src/alt/title.
@@ -194,8 +194,9 @@ func TestTableSectionsAndAlign(t *testing.T) {
 	if strings.Count(got, "<tbody>") != 2 {
 		t.Errorf("two tbody = %q", got)
 	}
-	// A non-table line with a dash but other chars is not a separator.
-	eq(t, "not | a-table\n", "<p>not | a-table</p>\n")
+	// A row line with a dash inside a word is data, not a separator: it is a
+	// one-row body-only table (matching the gem), not a paragraph.
+	eq(t, "not | a-table\n", "<table>\n  <tbody>\n    <tr>\n      <td>not</td>\n      <td>a-table</td>\n    </tr>\n  </tbody>\n</table>\n")
 }
 
 // TestIsTableSepRejections covers isTableSepLine's empty/non-dash/illegal-char

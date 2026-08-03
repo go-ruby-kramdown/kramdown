@@ -9,178 +9,266 @@ import (
 	"strings"
 )
 
-// reTableSep matches a kramdown table alignment/separator row, e.g. "|:-:|-:|" or
-// "---: | :---:". A row qualifies if, after trimming, it consists only of pipes,
-// plus signs, colons, hyphens, spaces and tabs and contains at least one hyphen.
-var reTableSep = regexp.MustCompile(`^[ \t]*[|+]?[ \t]*[:-][ \t:|+-]*$`)
+// This file ports kramdown 2.5.2's parser/kramdown/table.rb: a block that begins
+// (after up to three spaces, at a non-space) with a line carrying a pipe is a
+// candidate table. Rows are split into cells on unescaped pipes that lie outside
+// code spans; a "-"-only line is a separator (the row above it becomes the header
+// and sets column alignment), a "="-only line opens the footer, and a strict
+// second pass rejects the candidate unless every line carries an unescaped pipe
+// outside a code span. A table with no body is discarded.
 
-// isTableSepLine reports whether s is a valid table separator line (contains a
-// dash and only the allowed separator characters).
-func isTableSepLine(s string) bool {
-	t := strings.TrimSpace(s)
-	if t == "" || !strings.Contains(t, "-") {
-		return false
-	}
-	for _, r := range t {
-		switch r {
-		case '|', '+', ':', '-', ' ', '\t':
-		default:
-			return false
-		}
-	}
-	return reTableSep.MatchString(s)
+var (
+	// reCodeHTML matches an inline <code>…</code> HTML element (single line): the
+	// pipes it contains never split a cell. It is deliberately non-greedy.
+	reCodeHTML = regexp.MustCompile(`(?s)<code.*?>.*?</code>`)
+	// reHSepAlign scans a separator line for per-column alignment markers.
+	reHSepAlign = regexp.MustCompile(`[ \t]?(:?)-+(:?)[ \t]?`)
+	// reLeadingPipe reports a leading (optionally space-indented) pipe.
+	reLeadingPipe = regexp.MustCompile(`^\s*\|`)
+)
+
+// codeToken is a slice of a row/line flagged as lying inside a code span/element
+// (its pipes are protected) or ordinary, splittable text.
+type codeToken struct {
+	s    string
+	code bool
 }
 
-// tryTable parses a kramdown table starting at lines[start]: an optional leading
-// separator, an optional header row, a mandatory separator, then body rows
-// (further separators start new <tbody> sections). Returns nil if no table.
+// splitCodeHTML splits s into alternating ordinary-text and <code>…</code>-HTML
+// tokens (the latter protected from cell splitting).
+func splitCodeHTML(s string) []codeToken {
+	locs := reCodeHTML.FindAllStringIndex(s, -1)
+	if locs == nil {
+		return []codeToken{{s, false}}
+	}
+	var toks []codeToken
+	prev := 0
+	for _, l := range locs {
+		if l[0] > prev {
+			toks = append(toks, codeToken{s[prev:l[0]], false})
+		}
+		toks = append(toks, codeToken{s[l[0]:l[1]], true})
+		prev = l[1]
+	}
+	if prev < len(s) {
+		toks = append(toks, codeToken{s[prev:], false})
+	}
+	return toks
+}
+
+// splitCodespans splits s into alternating text and backtick code-span tokens,
+// matching kramdown's code-span rule: a maximal run of N backticks opens a span
+// that closes at the next run of exactly N backticks; an unterminated run is
+// literal text.
+func splitCodespans(s string) []codeToken {
+	var toks []codeToken
+	prev, i := 0, 0
+	for i < len(s) {
+		if s[i] != '`' {
+			i++
+			continue
+		}
+		j := i
+		for j < len(s) && s[j] == '`' {
+			j++
+		}
+		n := j - i
+		if end := findBacktickClose(s, j, n); end >= 0 {
+			if i > prev {
+				toks = append(toks, codeToken{s[prev:i], false})
+			}
+			toks = append(toks, codeToken{s[i:end], true})
+			prev, i = end, end
+			continue
+		}
+		i = j // unterminated run: literal text
+	}
+	if prev < len(s) {
+		toks = append(toks, codeToken{s[prev:], false})
+	}
+	return toks
+}
+
+// findBacktickClose returns the index just past a closing run of exactly n
+// backticks at or after from, or -1 if none.
+func findBacktickClose(s string, from, n int) int {
+	for k := from; k < len(s); {
+		if s[k] != '`' {
+			k++
+			continue
+		}
+		m := k
+		for m < len(s) && s[m] == '`' {
+			m++
+		}
+		if m-k == n {
+			return m
+		}
+		k = m
+	}
+	return -1
+}
+
+// tryTable parses a kramdown table starting at lines[start]. It returns nil when
+// the block is not a table (the caller then treats it as a paragraph).
 func (p *parser) tryTable(lines []string, start int) (*Element, int) {
-	// A table must contain a pipe in its first row and have a separator line within
-	// the first two lines.
 	if !strings.Contains(lines[start], "|") {
 		return nil, 0
 	}
-	// Scan the contiguous block of table lines (until a blank line).
+	// The table block runs to the next blank line.
 	end := start
 	for end < len(lines) && strings.TrimSpace(lines[end]) != "" {
 		end++
 	}
 	block := lines[start:end]
-	// Find the first separator line; it must exist and be at index 0 or 1.
-	sepIdx := -1
-	for k := 0; k < len(block) && k < 2; k++ {
-		if isTableSepLine(block[k]) {
-			sepIdx = k
+	leadingPipe := reLeadingPipe.MatchString(block[0])
+
+	tbl := newEl(ElTable)
+	var sections []*Element
+	var rows []*Element
+	var aligns []string
+	hasFooter := false
+	columns := 0
+
+	// addContainer flushes the accumulated rows into a new section of the given
+	// type. Once a footer has begun, a plain tbody flush is suppressed unless forced
+	// (so footer-region separators merge their rows into the single tfoot).
+	addContainer := func(t ElementType, force bool) {
+		if hasFooter && t == ElTbody && !force {
+			return
+		}
+		sec := newEl(t)
+		sec.Children = rows
+		rows = nil
+		sections = append(sections, sec)
+	}
+
+	i := 0
+	// A leading separator line is consumed and discarded (it only precedes the
+	// header; it never sets alignment).
+	if len(block) > 0 && isTableSepLine(block[0]) {
+		i = 1
+	}
+	reverted := false
+	for ; i < len(block); i++ {
+		line := block[i]
+		switch {
+		case isTableSepLine(line):
+			switch {
+			case len(rows) == 0:
+				// consecutive/leading separators: ignore
+			case len(aligns) == 0 && !hasFooter:
+				addContainer(ElThead, false)
+				aligns = tableAligns(line)
+			default:
+				addContainer(ElTbody, false)
+			}
+		case isTableFsepLine(line):
+			if len(rows) > 0 {
+				addContainer(ElTbody, true)
+			}
+			hasFooter = true
+		case strings.Contains(line, "|"):
+			row := p.tableRow(line, leadingPipe)
+			if n := len(row.Children); n > columns {
+				columns = n
+			}
+			rows = append(rows, row)
+		default:
+			// A non-blank line without a pipe: the candidate runs into a paragraph.
+			reverted = true
+		}
+		if reverted {
 			break
 		}
 	}
-	// kramdown recognises a table with no separator at all when the first line
-	// begins (after up to three spaces) with a pipe; every row is then a <tbody>
-	// row and there is no header. Without a leading pipe a separator is required.
-	if sepIdx < 0 {
-		// A separator-less table is only recognised when the first line starts with a
-		// pipe AND no line is a separator: a stray separator below the first rows
-		// makes kramdown treat the whole block as a paragraph instead.
-		if !startsWithTablePipe(lines[start]) || blockHasSeparator(block) {
-			return nil, 0
+	if reverted {
+		return nil, 0
+	}
+	// Strict pass: reject unless every line carries an unescaped pipe outside a code
+	// span (kramdown's pipe_on_line check over the whole block).
+	if !tableBlockHasPipe(block) {
+		return nil, 0
+	}
+	if len(rows) > 0 {
+		if hasFooter {
+			addContainer(ElTfoot, false)
+		} else {
+			addContainer(ElTbody, false)
 		}
-		return p.bodyOnlyTable(block, start, end)
 	}
-
-	tbl := newEl(ElTable)
-	var aligns []string
-	i := 0
-	// Optional leading separator line just sets nothing extra (kramdown ignores a
-	// leading sep before any header for alignment of the header).
-	leadingSep := false
-	if sepIdx == 0 {
-		aligns = parseAligns(block[0])
-		leadingSep = true
-		i = 1
+	// A table must have a body.
+	if !hasSection(sections, ElTbody) {
+		return nil, 0
 	}
-	// Header row + its separator.
-	var head *Element
-	if leadingSep {
-		// A leading separator: the rows up to the next separator are the header only
-		// if such a second separator exists; otherwise they are body rows (no header).
-		hdrEnd := -1
-		for k := i; k < len(block); k++ {
-			if isTableSepLine(block[k]) {
-				hdrEnd = k
-				break
+	// Pad every row to the column count and normalise the alignment length.
+	for _, sec := range sections {
+		for _, row := range sec.Children {
+			for len(row.Children) < columns {
+				row.addChild(newEl(ElTd))
 			}
 		}
-		if hdrEnd >= 0 {
-			// Header is the single row immediately before the second separator (kramdown
-			// treats the last pre-separator row as the header).
-			head = p.tableRow(block[hdrEnd-1], true, aligns)
-			aligns = parseAligns(block[hdrEnd])
-			i = hdrEnd + 1
+	}
+	if len(aligns) > columns {
+		aligns = aligns[:columns]
+	}
+	for len(aligns) < columns {
+		aligns = append(aligns, "")
+	}
+	for _, sec := range sections {
+		for _, row := range sec.Children {
+			applyAligns(row, aligns)
 		}
-		// No second separator: leave head nil and start body at i (the row after the
-		// leading separator).
-	} else {
-		// sepIdx == 1: header is block[0], separator block[1].
-		aligns = parseAligns(block[1])
-		head = p.tableRow(block[0], true, aligns)
-		i = 2
 	}
-	if head != nil {
-		applyAligns(head, aligns)
-		thead := newEl(ElThead)
-		tr := newEl(ElTr)
-		tr.Children = head.Children
-		thead.addChild(tr)
-		tbl.addChild(thead)
-	}
-	// Body rows, splitting into <tbody> sections at each further separator.
-	tbody := newEl(ElTbody)
-	for i < len(block) {
-		line := block[i]
-		if isTableSepLine(line) {
-			if len(tbody.Children) > 0 {
-				tbl.addChild(tbody)
-				tbody = newEl(ElTbody)
-			}
-			i++
-			continue
-		}
-		row := p.tableRow(line, false, aligns)
-		applyAligns(row, aligns)
-		tr := newEl(ElTr)
-		tr.Children = row.Children
-		tbody.addChild(tr)
-		i++
-	}
-	if len(tbody.Children) > 0 {
-		tbl.addChild(tbody)
-	}
+	tbl.Children = sections
 	return tbl, end - start
 }
 
-// startsWithTablePipe reports whether a line begins, after up to three leading
-// spaces, with a pipe — kramdown's trigger for a separator-less table.
-func startsWithTablePipe(line string) bool {
-	t := strings.TrimLeft(line, " ")
-	return len(line)-len(t) <= 3 && strings.HasPrefix(t, "|")
-}
-
-// blockHasSeparator reports whether any line of the block is a table separator.
-func blockHasSeparator(block []string) bool {
-	for _, l := range block {
-		if isTableSepLine(l) {
+// hasSection reports whether sections contains one of the given type.
+func hasSection(sections []*Element, t ElementType) bool {
+	for _, s := range sections {
+		if s.Type == t {
 			return true
 		}
 	}
 	return false
 }
 
-// bodyOnlyTable builds a headerless table (every row a <tbody> row) for a block
-// whose first line starts with a pipe and that has no separator line.
-func (p *parser) bodyOnlyTable(block []string, start, end int) (*Element, int) {
-	tbl := newEl(ElTable)
-	tbody := newEl(ElTbody)
-	for _, line := range block {
-		row := p.tableRow(line, false, nil)
-		tr := newEl(ElTr)
-		tr.Children = row.Children
-		tbody.addChild(tr)
-	}
-	tbl.addChild(tbody)
-	return tbl, end - start
+// isTableSepLine reports whether s is an alignment/separator line: only
+// "+|: \t-" characters (trailing whitespace ignored) and at least one dash.
+func isTableSepLine(s string) bool {
+	return isSepClass(s, '-', "+|: \t-")
 }
 
-// parseAligns reads cell alignments from a separator line into "left"/"right"/
-// "center"/"" per column.
-func parseAligns(sep string) []string {
-	sep = strings.TrimSpace(sep)
-	sep = strings.Trim(sep, "|+")
-	parts := splitTableCells(sep)
-	aligns := make([]string, 0, len(parts))
-	for _, c := range parts {
-		c = strings.TrimSpace(c)
-		left := strings.HasPrefix(c, ":")
-		right := strings.HasSuffix(c, ":")
+// isTableFsepLine reports whether s is a footer separator: only "+|: \t=" and at
+// least one "=".
+func isTableFsepLine(s string) bool {
+	return isSepClass(s, '=', "+|: \t=")
+}
+
+// isSepClass reports whether s (minus trailing whitespace) is non-empty, contains
+// the required rune and consists only of the allowed characters.
+func isSepClass(s string, required byte, allowed string) bool {
+	t := strings.TrimRight(s, " \t")
+	if t == "" || !strings.ContainsRune(t, rune(required)) {
+		return false
+	}
+	for i := 0; i < len(t); i++ {
+		if strings.IndexByte(allowed, t[i]) < 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// tableAligns reads per-column alignments from a separator line into
+// "left"/"right"/"center"/"" (default).
+func tableAligns(sep string) []string {
+	sep = strings.TrimRight(sep, " \t")
+	ms := reHSepAlign.FindAllStringSubmatch(sep, -1)
+	aligns := make([]string, 0, len(ms))
+	for _, m := range ms {
+		left, right := m[1] == ":", m[2] == ":"
 		switch {
 		case left && right:
 			aligns = append(aligns, "center")
@@ -195,44 +283,118 @@ func parseAligns(sep string) []string {
 	return aligns
 }
 
-// tableRow splits a "| a | b |" line into cells, building ElTd children (a header
-// row marks them for <th> rendering via Options["header"]).
-func (p *parser) tableRow(line string, header bool, _ []string) *Element {
-	line = strings.TrimSpace(line)
-	line = strings.TrimPrefix(line, "|")
-	line = strings.TrimSuffix(line, "|")
-	cells := splitTableCells(line)
+// tableRow splits one row line into cells (respecting code spans and escaped
+// pipes) and builds a <tr> of <td> elements holding each cell's raw text.
+func (p *parser) tableRow(line string, leadingPipe bool) *Element {
+	cells := splitTableCells(line, leadingPipe)
 	row := newEl(ElTr)
 	for _, c := range cells {
 		td := newEl(ElTd)
 		td.Options["raw"] = strings.TrimSpace(c)
-		if header {
-			td.Options["header"] = true
-		}
 		row.addChild(td)
 	}
 	return row
 }
 
-// splitTableCells splits on unescaped pipes ("\|" is a literal pipe in a cell).
-func splitTableCells(s string) []string {
-	var cells []string
-	var cur strings.Builder
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\\' && i+1 < len(s) && s[i+1] == '|' {
-			cur.WriteString("\\|")
-			i++
+// splitTableCells splits a row line into cell texts. Pipes inside a <code> HTML
+// element or a backtick code span do not split; "\|" is a literal pipe; a leading
+// empty cell is dropped when the row began with a pipe and a trailing empty cell
+// is always dropped.
+func splitTableCells(line string, leadingPipe bool) []string {
+	line = strings.TrimRight(line, " \t")
+	cells := []string{""}
+	appendLast := func(s string) { cells[len(cells)-1] += s }
+	for _, seg := range splitCodeHTML(line) {
+		if seg.code {
+			appendLast(seg.s)
 			continue
 		}
-		if s[i] == '|' {
-			cells = append(cells, cur.String())
-			cur.Reset()
-			continue
+		for _, ct := range splitCodespans(seg.s) {
+			if ct.code {
+				appendLast(ct.s)
+				continue
+			}
+			for k := 0; k < len(ct.s); k++ {
+				if ct.s[k] == '\\' && k+1 < len(ct.s) && ct.s[k+1] == '|' {
+					appendLast("|")
+					k++
+					continue
+				}
+				if ct.s[k] == '|' {
+					cells = append(cells, "")
+					continue
+				}
+				appendLast(string(ct.s[k]))
+			}
 		}
-		cur.WriteByte(s[i])
 	}
-	cells = append(cells, cur.String())
+	if leadingPipe && len(cells) > 0 && strings.TrimSpace(cells[0]) == "" {
+		cells = cells[1:]
+	}
+	if len(cells) > 0 && strings.TrimSpace(cells[len(cells)-1]) == "" {
+		cells = cells[:len(cells)-1]
+	}
 	return cells
+}
+
+// tableBlockHasPipe is kramdown's post-parse gate: parsing the whole block for
+// code spans (which may span row boundaries), every line must carry an unescaped
+// pipe outside a code span. It returns whether the candidate is a real table.
+func tableBlockHasPipe(block []string) bool {
+	whole := strings.Join(block, "\n") + "\n"
+	var toks []codeToken
+	for _, seg := range splitCodeHTML(whole) {
+		if seg.code {
+			continue // <code> HTML carries no value in kramdown's check: skipped
+		}
+		toks = append(toks, splitCodespans(seg.s)...)
+	}
+	pipeOnLine := false
+	for _, t := range toks {
+		lines := splitStripTrailingEmpty(t.s)
+		if len(lines) == 0 {
+			continue
+		}
+		if t.code {
+			if len(lines) > 2 || (len(lines) == 2 && !pipeOnLine) {
+				break
+			}
+			if len(lines) == 2 && pipeOnLine {
+				pipeOnLine = false
+			}
+			continue
+		}
+		if len(lines) > 1 && !pipeOnLine && !lineHasTablePipe(lines[0]) {
+			break
+		}
+		base := pipeOnLine
+		if len(lines) > 1 {
+			base = false
+		}
+		pipeOnLine = base || lineHasTablePipe(lines[len(lines)-1])
+	}
+	return pipeOnLine
+}
+
+// splitStripTrailingEmpty splits s on newlines and drops trailing empty fields
+// (Ruby's String#split default).
+func splitStripTrailingEmpty(s string) []string {
+	parts := strings.Split(s, "\n")
+	for len(parts) > 0 && parts[len(parts)-1] == "" {
+		parts = parts[:len(parts)-1]
+	}
+	return parts
+}
+
+// lineHasTablePipe reports whether s starts with a pipe or contains an unescaped
+// pipe (kramdown's ^TABLE_PIPE_CHECK).
+func lineHasTablePipe(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] == '|' && (i == 0 || s[i-1] != '\\') {
+			return true
+		}
+	}
+	return false
 }
 
 // applyAligns records each cell's alignment style (if any) for the converter.

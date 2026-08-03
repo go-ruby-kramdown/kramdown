@@ -240,8 +240,11 @@ func TestTable(t *testing.T) {
 	if !strings.Contains(got, "text-align: center") {
 		t.Errorf("center col = %q", got)
 	}
-	// A line with a pipe but no separator is not a table.
-	eq(t, "a | b\n", "<p>a | b</p>\n")
+	// A single line with an unescaped pipe (no leading pipe, no separator) is a
+	// one-row body-only table, matching the gem.
+	eq(t, "a | b\n", "<table>\n  <tbody>\n    <tr>\n      <td>a</td>\n      <td>b</td>\n    </tr>\n  </tbody>\n</table>\n")
+	// A pipe that is escaped everywhere leaves no table pipe: it is a paragraph.
+	eq(t, "a \\| b\n", "<p>a | b</p>\n")
 	// An escaped pipe in a cell stays literal.
 	got = h("| a \\| b |\n|---|\n")
 	if !strings.Contains(got, "a | b") {

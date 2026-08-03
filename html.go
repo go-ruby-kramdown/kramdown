@@ -244,9 +244,12 @@ func (c *htmlConverter) convertTable(e *Element, b *strings.Builder, indent int)
 	for _, sec := range e.Children {
 		tag := "tbody"
 		cell := "td"
-		if sec.Type == ElThead {
+		switch sec.Type {
+		case ElThead:
 			tag = "thead"
 			cell = "th"
+		case ElTfoot:
+			tag = "tfoot"
 		}
 		b.WriteString(ind(indent+1) + "<" + tag + ">\n")
 		for _, tr := range sec.Children {
@@ -257,7 +260,12 @@ func (c *htmlConverter) convertTable(e *Element, b *strings.Builder, indent int)
 					style = ` style="text-align: ` + al + `"`
 				}
 				raw, _ := td.Options["raw"].(string)
-				b.WriteString(ind(indent+3) + "<" + cell + style + ">" + c.renderRaw(raw, indent+3) + "</" + cell + ">\n")
+				inner := c.renderRaw(raw, indent+3)
+				if inner == "" {
+					// kramdown renders an empty cell as a non-breaking space.
+					inner = "\u00a0"
+				}
+				b.WriteString(ind(indent+3) + "<" + cell + style + ">" + inner + "</" + cell + ">\n")
 			}
 			b.WriteString(ind(indent+2) + "</tr>\n")
 		}
