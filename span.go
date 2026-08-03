@@ -123,6 +123,17 @@ func (sp *spanParser) run() {
 			}
 			lit.WriteByte('<')
 			sp.pos++
+		case '{':
+			if el, n, ok := sp.trySpanExtension(); ok {
+				flush()
+				if el != nil {
+					sp.out = append(sp.out, el)
+				}
+				sp.pos += n
+				continue
+			}
+			lit.WriteByte('{')
+			sp.pos++
 		case '\n':
 			// Soft line break, possibly hard if preceded by two spaces (handled at
 			// block level via trailing markers); here keep newline literal.
@@ -139,6 +150,68 @@ func (sp *spanParser) run() {
 // reSpanIAL matches a span-level IAL ("{:...}") immediately following an inline
 // element, capturing its attribute body.
 var reSpanIAL = regexp.MustCompile(`^\{:([^}]*)\}`)
+
+// reSpanExtStart matches an inline extension start tag "{::name attrs /?}".
+var reSpanExtStart = regexp.MustCompile(`^\{::(\w+)(?:[ \t]((?:\\\}|[^}])*?))?(/)?\}`)
+
+// trySpanExtension parses an inline "{::name …}…{:/…}" extension at the current
+// position. It returns the element to emit (nil for none, e.g. a self-closing or
+// non-html nomarkdown), the number of bytes consumed, and whether it was handled;
+// a false return leaves the "{" to be emitted literally.
+func (sp *spanParser) trySpanExtension() (*Element, int, bool) {
+	s := sp.src[sp.pos:]
+	m := reSpanExtStart.FindStringSubmatch(s)
+	if m == nil {
+		return nil, 0, false
+	}
+	name, attrRaw, selfClose := m[1], m[2], m[3] == "/"
+	if name != "comment" && name != "nomarkdown" {
+		return nil, 0, false // unknown extension: literal
+	}
+	if selfClose {
+		return nil, len(m[0]), true // no body -> nothing rendered
+	}
+	rest := s[len(m[0]):]
+	stopIdx, stopLen := findSpanStop(rest, name)
+	if stopIdx < 0 {
+		return nil, 0, false // unterminated: literal
+	}
+	body := rest[:stopIdx]
+	consumed := len(m[0]) + stopIdx + stopLen
+	switch name {
+	case "comment":
+		el := newEl(ElRawHTMLSpan)
+		el.Value = "<!-- " + body + " -->"
+		return el, consumed, true
+	default: // nomarkdown
+		if !rawForHTML(extAttrType(attrRaw)) {
+			return nil, consumed, true
+		}
+		el := newEl(ElRawHTMLSpan)
+		el.Value = body
+		return el, consumed, true
+	}
+}
+
+// findSpanStop returns the offset and length of the first "{:/name}" or "{:/}"
+// stop tag in s, or -1 if none. A named stop tag matches only its own extension.
+func findSpanStop(s, name string) (idx, length int) {
+	for i := 0; i+2 < len(s); i++ {
+		if s[i] != '{' || s[i+1] != ':' || s[i+2] != '/' {
+			continue
+		}
+		j := i + 3
+		for j < len(s) && s[j] != '}' {
+			j++
+		}
+		if j < len(s) {
+			if stop := s[i+3 : j]; stop == "" || stop == name {
+				return i, j - i + 1
+			}
+		}
+	}
+	return -1, 0
+}
 
 // push appends a span element that consumed n source bytes, then consumes and
 // applies a span IAL ("{:...}") if one immediately follows.

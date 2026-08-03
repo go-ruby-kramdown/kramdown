@@ -290,6 +290,13 @@ func (p *parser) parseList(lines []string, start int, parent *Element) int {
 	for _, it := range items {
 		li := newEl(ElLI)
 		lns := it.lines
+		// A leading "{:…}" IAL on the item's first line applies to the <li>.
+		if len(lns) > 0 {
+			if body, rest, ok := stripLeadingItemIAL(lns[0]); ok {
+				applyIALToElement(li, body, p.aldDefs)
+				lns = append([]string{rest}, lns[1:]...)
+			}
+		}
 		// A blank line separated this item from what follows: kramdown keeps that
 		// blank in the item's value as a trailing :blank child, which the looseness
 		// rule reads.
@@ -393,6 +400,11 @@ func (p *parser) tryDefinitionList(lines []string, start int) (*Element, int) {
 			// term/definition starts a fresh <dl>.
 			break
 		}
+		if _, ok := matchBlockIAL(line); ok {
+			// A standalone block IAL ends the list; the surrounding block loop attaches
+			// it to the <dl> just parsed.
+			break
+		}
 		if strings.TrimSpace(line) == "" {
 			// A blank line continues the definition list only if the next non-blank
 			// block is another definition: either a ": def" marker, or a term line
@@ -435,6 +447,9 @@ func (p *parser) tryDefinitionList(lines []string, start int) (*Element, int) {
 				if strings.TrimRight(l, " \t") == "^" {
 					break // EOB terminates this definition (and the list)
 				}
+				if _, ok := matchBlockIAL(l); ok && !strings.HasPrefix(l, strings.Repeat(" ", indent)) {
+					break // a standalone (unindented) block IAL ends the definition
+				}
 				if strings.TrimSpace(l) == "" {
 					j := i
 					for j < len(lines) && strings.TrimSpace(lines[j]) == "" {
@@ -466,6 +481,13 @@ func (p *parser) tryDefinitionList(lines []string, start int) (*Element, int) {
 				body = body[:len(body)-1]
 			}
 			dd := newEl(ElDD)
+			// A leading "{:…}" IAL on the definition applies to the <dd>.
+			if len(body) > 0 {
+				if ialBody, rest, ok := stripLeadingItemIAL(body[0]); ok {
+					applyIALToElement(dd, ialBody, p.aldDefs)
+					body[0] = rest
+				}
+			}
 			p.parseBlocks(body, dd)
 			if pendingLoose {
 				dd.Options["force_loose"] = true
@@ -474,9 +496,15 @@ func (p *parser) tryDefinitionList(lines []string, start int) (*Element, int) {
 			dl.addChild(dd)
 			continue
 		}
-		// Otherwise it is a term line (possibly multiple consecutive terms).
+		// Otherwise it is a term line (possibly multiple consecutive terms). A leading
+		// "{:…}" IAL on the term applies to the <dt>.
 		dt := newEl(ElDT)
-		dt.Options["raw"] = strings.TrimRight(line, " \t")
+		term := strings.TrimRight(line, " \t")
+		if body, rest, ok := stripLeadingItemIAL(term); ok {
+			applyIALToElement(dt, body, p.aldDefs)
+			term = rest
+		}
+		dt.Options["raw"] = term
 		dl.addChild(dt)
 		i++
 	}

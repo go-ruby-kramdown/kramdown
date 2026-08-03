@@ -227,6 +227,12 @@ func TestThreeTightItems(t *testing.T) {
 	eq(t, "* a\n* b\n* c\n", "<ul>\n  <li>a</li>\n  <li>b</li>\n  <li>c</li>\n</ul>\n")
 }
 
+// TestSpanNomarkdownTypeFilter covers an inline {::nomarkdown} whose type filter
+// excludes html: it renders nothing for the HTML converter.
+func TestSpanNomarkdownTypeFilter(t *testing.T) {
+	eq(t, "a {::nomarkdown type=\"latex\"}X{:/} b\n", "<p>a  b</p>\n")
+}
+
 // TestInlineOptions covers the {::options} keys the corpus does not exercise
 // (auto_ids off, auto_id_prefix, hard_wrap off, footnote_prefix).
 func TestInlineOptions(t *testing.T) {

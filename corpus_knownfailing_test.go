@@ -31,8 +31,7 @@ var knownFailing = map[string]bool{
 	// in a global pre-pass, so the literal tab is no longer available.
 	"block/06_codeblock/whitespace.text": true,
 
-	// block/08_list (5)
-	"block/08_list/item_ial.text":            true,
+	// block/08_list (4)
 	"block/08_list/lazy_and_nested.text":     true,
 	"block/08_list/list_and_others.text":     true,
 	"block/08_list/mixed.text":               true,
@@ -48,9 +47,8 @@ var knownFailing = map[string]bool{
 	"block/12_extension/options.text":  true,
 	"block/12_extension/options3.text": true,
 
-	// block/13_definition_list (4)
+	// block/13_definition_list (3)
 	"block/13_definition_list/auto_ids.text":    true,
-	"block/13_definition_list/deflist_ial.text": true,
 	"block/13_definition_list/item_ial.text":    true,
 	"block/13_definition_list/with_blocks.text": true,
 
@@ -95,10 +93,8 @@ var knownFailing = map[string]bool{
 	// span/autolinks (1)
 	"span/autolinks/url_links.text": true,
 
-	// span/extension (3)
-	"span/extension/comment.text":    true,
-	"span/extension/nomarkdown.text": true,
-	"span/extension/options.text":    true,
+	// span/extension (1)
+	"span/extension/options.text": true,
 
 	// span/line_breaks (1)
 	"span/line_breaks/normal.text": true,
