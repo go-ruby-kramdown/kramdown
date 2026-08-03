@@ -26,6 +26,27 @@ func splitALD(ial string) (name, attrs string, ok bool) {
 	return m[1], m[2], true
 }
 
+// reLeadingItemIAL matches an inline-attribute list at the very start of a
+// list-item, definition or term line, capturing its body.
+var reLeadingItemIAL = regexp.MustCompile(`^[ \t]*\{:((?:\\\}|[^}])*)\}[ \t]*`)
+
+// stripLeadingItemIAL detects a leading "{:…}" IAL on a list-item/definition/term
+// line, returning its attribute body and the remaining line text. A "{::…}"
+// extension, a "{:/…}" stop tag and an ALD definition ("name: …") are not
+// item IALs.
+func stripLeadingItemIAL(s string) (body, rest string, ok bool) {
+	m := reLeadingItemIAL.FindStringSubmatch(s)
+	if m == nil {
+		return "", "", false
+	}
+	body = m[1]
+	if strings.HasPrefix(body, ":") || strings.HasPrefix(body, "/") ||
+		reALDName.MatchString(strings.TrimSpace(body)) {
+		return "", "", false
+	}
+	return body, s[len(m[0]):], true
+}
+
 // ialToken is one parsed attribute-list token.
 type ialToken struct {
 	kind string // "class", "id", "key", "ref", "ignore"
