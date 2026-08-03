@@ -176,7 +176,13 @@ func TestBlockquote(t *testing.T) {
 // indented code blocks.
 func TestCodeBlocks(t *testing.T) {
 	eq(t, "```\nx=1\n```\n", "<pre><code>x=1\n</code></pre>\n")
-	eq(t, "```ruby\nx=1\n```\n", "<pre><code class=\"language-ruby\">x=1\n</code></pre>\n")
+	// Rouge is kramdown's default syntax_highlighter, so a labelled fence emits the
+	// gem's highlighter-rouge token-span markup rather than a plain <code>.
+	eq(t, "```ruby\nx=1\n```\n",
+		"<div class=\"language-ruby highlighter-rouge\"><div class=\"highlight\">"+
+			"<pre class=\"highlight\"><code><span class=\"n\">x</span>"+
+			"<span class=\"o\">=</span><span class=\"mi\">1</span>\n"+
+			"</code></pre>\n</div></div>\n")
 	eq(t, "~~~\nx=1\n~~~\n", "<pre><code>x=1\n</code></pre>\n")
 	eq(t, "    indented\n", "<pre><code>indented\n</code></pre>\n")
 	// A fenced block with no body.
