@@ -71,7 +71,9 @@ func New(src string, opts *Options) *Document {
 	}
 	p := newParser(src, o)
 	root := p.parse()
-	return &Document{Root: root, Opts: o, Warnings: p.warnings, source: src, parserState: p}
+	// p.opts may have been mutated by a {::options} extension during the parse; the
+	// document (and its renderer) must observe those updated options.
+	return &Document{Root: root, Opts: p.opts, Warnings: p.warnings, source: src, parserState: p}
 }
 
 // ToHTML renders the document to HTML, matching Kramdown::Document#to_html. Span

@@ -68,6 +68,9 @@ const (
 	ElHTMLBlock
 	// ElComment is a {::comment} extension block; Value holds the comment text.
 	ElComment
+	// ElRaw is a {::nomarkdown} extension block; Value holds the verbatim content
+	// and Options["types"] the target-format filter ([] means all formats).
+	ElRaw
 	// ElFootnoteDef collects a footnote definition's blocks (never rendered inline).
 	ElFootnoteDef
 

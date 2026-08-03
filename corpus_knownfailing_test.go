@@ -46,12 +46,11 @@ var knownFailing = map[string]bool{
 	"block/11_ial/nested.text":          true,
 	"block/11_ial/simple.text":          true,
 
-	// block/12_extension (5)
-	"block/12_extension/ignored.text":    true,
-	"block/12_extension/nomarkdown.text": true,
-	"block/12_extension/options.text":    true,
-	"block/12_extension/options2.text":   true,
-	"block/12_extension/options3.text":   true,
+	// block/12_extension (2)
+	// options: needs parse_block_html/parse_span_html (the HTML5 front-end).
+	// options3: needs the rouge syntax highlighter's token markup.
+	"block/12_extension/options.text":  true,
+	"block/12_extension/options3.text": true,
 
 	// block/13_definition_list (4)
 	"block/13_definition_list/auto_ids.text":    true,
