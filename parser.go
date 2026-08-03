@@ -516,6 +516,11 @@ func (p *parser) parseBlockquote(lines []string, start int, parent *Element) int
 		if strings.TrimSpace(line) == "" {
 			break
 		}
+		// A standalone block IAL ends the quote so it attaches to the blockquote
+		// itself (via applyStandaloneIAL), not to the quote's last inner paragraph.
+		if _, ok := matchBlockIAL(line); ok {
+			break
+		}
 		// Lazy continuation: a non-blank, non-block line continues the quote.
 		if !p.startsNewBlock(lines, i) {
 			inner = append(inner, strings.TrimRight(line, " \t"))

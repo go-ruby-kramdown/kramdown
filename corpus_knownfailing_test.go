@@ -22,9 +22,6 @@ var knownFailing = map[string]bool{
 	"block/04_header/setext_header.text":          true,
 	"block/04_header/with_auto_id_stripping.text": true,
 
-	// block/05_blockquote (1)
-	"block/05_blockquote/lazy.text": true,
-
 	// block/06_codeblock (1)
 	// whitespace: the show-whitespaces converter renders literal tabs inside the
 	// code as <span class="ws-tab">\t</span>, but this port expands tabs to spaces
