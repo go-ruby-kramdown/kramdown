@@ -44,7 +44,7 @@ func TestFootnoteMultiParagraph(t *testing.T) {
 // definition and a footnote definition with a trailing IAL.
 func TestHarvestVariants(t *testing.T) {
 	// A reference definition indented up to three spaces.
-	eq(t, "[t][id]\n\n   [id]: http://x\n", "<p><a href=\"http://x\">t</a></p>\n")
+	eq(t, "[t][id]\n\n   [id]: http://x\n", "<p><a href=\"http://x\">t</a></p>\n\n")
 	// A footnote definition followed by a block IAL line (the IAL is consumed).
 	got := h("A[^f]\n\n[^f]: note\n{:.fnclass}\n")
 	if !strings.Contains(got, "note") {

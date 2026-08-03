@@ -117,16 +117,17 @@ func TestInlineLinks(t *testing.T) {
 // undefined reference.
 func TestReferenceLinks(t *testing.T) {
 	eq(t, "[t][id]\n\n[id]: http://x \"ti\"\n",
-		"<p><a href=\"http://x\" title=\"ti\">t</a></p>\n")
-	eq(t, "[id][]\n\n[id]: http://x\n", "<p><a href=\"http://x\">id</a></p>\n")
-	eq(t, "[id]\n\n[id]: http://x\n", "<p><a href=\"http://x\">id</a></p>\n")
+		"<p><a href=\"http://x\" title=\"ti\">t</a></p>\n\n")
+	eq(t, "[id][]\n\n[id]: http://x\n", "<p><a href=\"http://x\">id</a></p>\n\n")
+	eq(t, "[id]\n\n[id]: http://x\n", "<p><a href=\"http://x\">id</a></p>\n\n")
 	// Reference id matches case-insensitively.
-	eq(t, "[T][ID]\n\n[id]: http://x\n", "<p><a href=\"http://x\">T</a></p>\n")
+	eq(t, "[T][ID]\n\n[id]: http://x\n", "<p><a href=\"http://x\">T</a></p>\n\n")
 	// An undefined reference stays literal.
 	eq(t, "[t][nope]\n", "<p>[t][nope]</p>\n")
-	// Angle-bracketed URL and a two-line title definition.
+	// Angle-bracketed URL and a two-line title definition. The harvested link
+	// definition leaves its preceding blank line, so the document ends "\n\n".
 	eq(t, "[t][id]\n\n[id]: <http://x>\n  \"wrapped\"\n",
-		"<p><a href=\"http://x\" title=\"wrapped\">t</a></p>\n")
+		"<p><a href=\"http://x\" title=\"wrapped\">t</a></p>\n\n")
 }
 
 // TestAutolinksAndRawHTML covers URL/email autolinks and a raw inline HTML tag.
@@ -302,7 +303,7 @@ func TestALD(t *testing.T) {
 // TestSpanIALOnImage covers an IAL merged onto an image's extra attributes.
 func TestImageWithReferenceTitle(t *testing.T) {
 	eq(t, "![a][r]\n\n[r]: img.png \"T\"\n",
-		"<p><img src=\"img.png\" alt=\"a\" title=\"T\" /></p>\n")
+		"<p><img src=\"img.png\" alt=\"a\" title=\"T\" /></p>\n\n")
 }
 
 // TestSmartQuotes covers curly single/double quotes and the apostrophe / decade
@@ -340,7 +341,7 @@ func TestEntities(t *testing.T) {
 // TestAbbreviations covers an abbreviation definition expanded into <abbr>.
 func TestAbbreviations(t *testing.T) {
 	eq(t, "The HTML spec.\n\n*[HTML]: HyperText Markup Language\n",
-		"<p>The <abbr title=\"HyperText Markup Language\">HTML</abbr> spec.</p>\n")
+		"<p>The <abbr title=\"HyperText Markup Language\">HTML</abbr> spec.</p>\n\n")
 	// An abbreviation with an IAL gains a class.
 	got := h("Use W3C.\n\n*[W3C]: Consortium\n{:.org}\n")
 	if !strings.Contains(got, "class=\"org\"") || !strings.Contains(got, "title=\"Consortium\"") {
@@ -418,12 +419,13 @@ func TestEndOfBlockMarker(t *testing.T) {
 	eq(t, "a\n^\nb\n", "<p>a</p>\n<p>b</p>\n")
 }
 
-// TestEmptyAndBlankInput covers empty input and whitespace-only input.
+// TestEmptyAndBlankInput covers empty input and whitespace-only input. Matching
+// the gem, both render to a lone "\n" (the document's single :blank element).
 func TestEmptyInput(t *testing.T) {
-	if got := h(""); got != "" {
+	if got := h(""); got != "\n" {
 		t.Errorf("empty = %q", got)
 	}
-	if got := h("\n\n"); got != "" {
+	if got := h("\n\n"); got != "\n" {
 		t.Errorf("blank = %q", got)
 	}
 }

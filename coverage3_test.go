@@ -77,7 +77,7 @@ func TestFootnoteDefTrailingBlankBody(t *testing.T) {
 // in the continuation scan.
 func TestListBreaks(t *testing.T) {
 	// A list whose final item is followed by end-of-input after a blank line.
-	eq(t, "* a\n\n", "<ul>\n  <li>a</li>\n</ul>\n")
+	eq(t, "* a\n\n", "<ul>\n  <li>a</li>\n</ul>\n\n")
 	// A list immediately at end of input.
 	eq(t, "* only\n", "<ul>\n  <li>only</li>\n</ul>\n")
 }
