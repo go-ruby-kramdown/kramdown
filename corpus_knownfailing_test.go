@@ -61,14 +61,11 @@ var knownFailing = map[string]bool{
 	"block/12_extension/options2.text":   true,
 	"block/12_extension/options3.text":   true,
 
-	// block/13_definition_list (7)
-	"block/13_definition_list/auto_ids.text":         true,
-	"block/13_definition_list/deflist_ial.text":      true,
-	"block/13_definition_list/item_ial.text":         true,
-	"block/13_definition_list/separated_by_eob.text": true,
-	"block/13_definition_list/simple.text":           true,
-	"block/13_definition_list/too_much_space.text":   true,
-	"block/13_definition_list/with_blocks.text":      true,
+	// block/13_definition_list (4)
+	"block/13_definition_list/auto_ids.text":    true,
+	"block/13_definition_list/deflist_ial.text": true,
+	"block/13_definition_list/item_ial.text":    true,
+	"block/13_definition_list/with_blocks.text": true,
 
 	// block/14_table (5)
 	"block/14_table/errors.text":              true,

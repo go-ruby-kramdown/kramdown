@@ -286,12 +286,15 @@ func (p *parser) tryDefinitionList(lines []string, start int) (*Element, int) {
 		}
 		k++
 	}
-	// A single blank line may separate the term(s) from the ": definition" marker
-	// (kramdown's "loose" definition list). Skip such a blank run before the marker.
+	// At most ONE blank line may separate the term(s) from the ": definition"
+	// marker (kramdown's "loose" definition list). Two or more blanks break the
+	// association, so the ": …" line is a plain paragraph, not a definition.
+	blanks := 0
 	for k < len(lines) && strings.TrimSpace(lines[k]) == "" {
 		k++
+		blanks++
 	}
-	if k >= len(lines) || !reDefMarker.MatchString(lines[k]) {
+	if blanks > 1 || k >= len(lines) || !reDefMarker.MatchString(lines[k]) {
 		return nil, 0
 	}
 	dl := newEl(ElDL)
@@ -299,6 +302,11 @@ func (p *parser) tryDefinitionList(lines []string, start int) (*Element, int) {
 	pendingLoose := false // a blank line separated the next definition from its term
 	for i < len(lines) {
 		line := lines[i]
+		if strings.TrimRight(line, " \t") == "^" {
+			// An end-of-block marker terminates the definition list; a following
+			// term/definition starts a fresh <dl>.
+			break
+		}
 		if strings.TrimSpace(line) == "" {
 			// A blank line continues the definition list only if the next non-blank
 			// block is another definition: either a ": def" marker, or a term line
@@ -308,18 +316,24 @@ func (p *parser) tryDefinitionList(lines []string, start int) (*Element, int) {
 				j++
 			}
 			cont := false
+			markerAfterBlank := false
 			if j < len(lines) {
 				if reDefMarker.MatchString(lines[j]) {
 					cont = true
+					// The blank separates a definition from its own term, so this
+					// definition is loose (its content is wrapped in <p>).
+					markerAfterBlank = true
 				} else if j+1 < len(lines) && reDefMarker.MatchString(lines[j+1]) &&
 					!reDefMarker.MatchString(lines[j]) && strings.TrimSpace(lines[j]) != "" {
+					// The blank precedes a fresh term whose marker follows immediately:
+					// a new, tight term/definition group.
 					cont = true
 				}
 			}
 			if cont {
-				// A definition that follows a blank line renders as a loose <dd> (its
-				// content wrapped in <p>).
-				pendingLoose = true
+				if markerAfterBlank {
+					pendingLoose = true
+				}
 				i = j
 				continue
 			}
@@ -332,6 +346,9 @@ func (p *parser) tryDefinitionList(lines []string, start int) (*Element, int) {
 			i++
 			for i < len(lines) {
 				l := lines[i]
+				if strings.TrimRight(l, " \t") == "^" {
+					break // EOB terminates this definition (and the list)
+				}
 				if strings.TrimSpace(l) == "" {
 					j := i
 					for j < len(lines) && strings.TrimSpace(lines[j]) == "" {
