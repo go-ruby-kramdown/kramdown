@@ -227,6 +227,19 @@ func TestThreeTightItems(t *testing.T) {
 	eq(t, "* a\n* b\n* c\n", "<ul>\n  <li>a</li>\n  <li>b</li>\n  <li>c</li>\n</ul>\n")
 }
 
+// TestHasBlankSep covers hasBlankSep's internal-blank detection (used by the
+// definition-list converter for a description with an interior blank separator).
+func TestHasBlankSep(t *testing.T) {
+	mid := []*Element{newEl(ElP), newEl(ElBlank), newEl(ElP)}
+	if !hasBlankSep(mid) {
+		t.Fatal("interior blank should be reported as a separator")
+	}
+	edges := []*Element{newEl(ElBlank), newEl(ElP), newEl(ElBlank)}
+	if hasBlankSep(edges) {
+		t.Fatal("leading/trailing blanks are not interior separators")
+	}
+}
+
 // TestLastRuneEmptyAndPrevFlush covers lastRune's empty branch and smartQuotes'
 // prevOf reading from the flushed buffer.
 func TestLastRuneAndPrev(t *testing.T) {

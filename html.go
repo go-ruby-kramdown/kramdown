@@ -170,45 +170,37 @@ func (c *htmlConverter) convertList(e *Element, b *strings.Builder, indent int) 
 		tag = "ol"
 	}
 	b.WriteString(pad + "<" + tag + c.attrStr(e) + ">\n")
-	// Looseness is a list-wide property in kramdown: if any item is separated by a
-	// blank line, every item renders in the loose (<p>-wrapped) form.
-	tight, _ := e.Options["tight"].(bool)
 	for _, li := range e.Children {
-		if !tight {
-			li.Options["force_loose"] = true
-		}
 		c.convertLI(li, b, indent+1)
 	}
 	b.WriteString(pad + "</" + tag + ">\n")
 }
 
-// convertLI renders a list item, choosing the tight (inline) or loose (block) form
-// based on its content.
+// convertLI renders a list item. kramdown marks an item's first paragraph
+// "transparent" (rendered inline, without a <p> wrapper) when the item is tight;
+// finalizeListItems has already applied that per-item decision.
 func (c *htmlConverter) convertLI(li *Element, b *strings.Builder, indent int) {
 	pad := ind(indent)
 	blocks := contentBlocks(li.Children)
-	forceLoose, _ := li.Options["force_loose"].(bool)
-	tight := !hasBlankSep(li.Children) && !forceLoose
-	// Tight item: a single paragraph, no internal blank separators, not forced
-	// loose -> inline text without a <p> wrapper.
-	if len(blocks) == 1 && blocks[0].Type == ElP && tight {
-		b.WriteString(pad + "<li" + c.attrStr(li) + ">")
-		b.WriteString(c.renderSpans(blocks[0], indent))
-		b.WriteString("</li>\n")
-		return
-	}
 	if len(blocks) == 0 {
 		b.WriteString(pad + "<li" + c.attrStr(li) + "></li>\n")
 		return
 	}
-	// Tight item whose first block is a paragraph followed by further blocks (e.g. a
-	// nested list): the leading paragraph renders inline (no <p>), the rest as
-	// blocks. Match kramdown's "<li>text\n  <ul>…" layout.
-	if tight && blocks[0].Type == ElP {
+	transparent, _ := li.Options["first_transparent"].(bool)
+	if transparent {
+		// Lone transparent paragraph: fully inline. With trailing blocks (e.g. a
+		// nested list) the first paragraph renders inline then a newline, the rest as
+		// blocks — kramdown's "<li>text\n  <ul>…" layout.
+		if len(blocks) == 1 {
+			b.WriteString(pad + "<li" + c.attrStr(li) + ">")
+			b.WriteString(c.renderSpans(blocks[0], indent))
+			b.WriteString("</li>\n")
+			return
+		}
 		b.WriteString(pad + "<li" + c.attrStr(li) + ">")
-		b.WriteString(c.renderSpans(blocks[0], indent))
+		b.WriteString(c.renderSpans(li.Children[0], indent))
 		b.WriteString("\n")
-		c.convertChildren(blocks[1:], b, indent+1)
+		c.convertChildren(li.Children[1:], b, indent+1)
 		b.WriteString(pad + "</li>\n")
 		return
 	}
