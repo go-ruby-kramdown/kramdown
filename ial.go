@@ -97,48 +97,24 @@ func unquoteIAL(s string) string {
 	return inner
 }
 
-// applyIALToElement applies a raw IAL string to el's HTML attributes, merging
-// classes and overriding ids/keys, matching kramdown's emission order: keys (in
-// order), then a single class attribute (space-joined, later-first), then id.
+// applyIALToElement applies a raw IAL string to el's HTML attributes in kramdown's
+// order: each attribute keeps the position of its first appearance in the IAL (or
+// its pre-existing position on the element), a class accumulates space-separated
+// values, and an id or key takes its last value.
 func applyIALToElement(el *Element, raw string, alds map[string]string) {
-	toks := parseIAL(raw, alds)
-	var classes []string
-	id := ""
-	var keys []ialToken
-	for _, t := range toks {
+	for _, t := range parseIAL(raw, alds) {
 		switch t.kind {
 		case "class":
-			classes = append(classes, t.val)
+			if existing, ok := el.getAttr("class"); ok {
+				el.setAttr("class", existing+" "+t.val)
+			} else {
+				el.setAttr("class", t.val)
+			}
 		case "id":
-			id = t.val
+			el.setAttr("id", t.val)
 		case "key":
-			// replace existing key of same name
-			replaced := false
-			for i := range keys {
-				if keys[i].name == t.name {
-					keys[i].val = t.val
-					replaced = true
-				}
-			}
-			if !replaced {
-				keys = append(keys, t)
-			}
+			el.setAttr(t.name, t.val)
 		}
-	}
-	// kramdown merges new classes after existing class attribute value.
-	if len(classes) > 0 {
-		existing, _ := el.getAttr("class")
-		all := classes
-		if existing != "" {
-			all = append([]string{existing}, classes...)
-		}
-		el.setAttr("class", strings.Join(all, " "))
-	}
-	for _, k := range keys {
-		el.setAttr(k.name, k.val)
-	}
-	if id != "" {
-		el.setAttr("id", id)
 	}
 }
 

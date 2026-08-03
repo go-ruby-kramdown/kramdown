@@ -136,7 +136,7 @@ var (
 	reSetext     = regexp.MustCompile(`^(=+|-+)\s*$`)
 	reSetextPure = regexp.MustCompile(`^ {0,3}(=+|-+)[ \t]*$`)
 	reHR         = regexp.MustCompile(`^ {0,3}((\* *){3,}|(- *){3,}|(_ *){3,})$`)
-	reBlockIAL   = regexp.MustCompile(`^\{:(?:: *)?([^}]*)\}\s*$`)
+	reBlockIAL   = regexp.MustCompile(`^ {0,3}\{:(?:: *)?((?:\\\}|[^}])*)\}\s*$`)
 	reIndentCode = regexp.MustCompile(`^( {4}|\t)`)
 	// reLazyCodeJoin folds a lazily-continued (0-3 space) code line onto the
 	// previous line: the newline becomes a single space.
@@ -535,8 +535,10 @@ func (p *parser) parseBlockquote(lines []string, start int, parent *Element) int
 // not an IAL and is excluded so the dedicated extension parser handles it.
 func matchBlockIAL(line string) (string, bool) {
 	t := strings.TrimRight(line, " \t")
-	// "{::…}" extensions and "{:/…}" stop tags are not IALs.
-	if strings.HasPrefix(t, "{::") || strings.HasPrefix(t, "{:/") {
+	// "{::…}" extensions and "{:/…}" stop tags are not IALs (up to three leading
+	// spaces are allowed before the brace, matching kramdown's OPT_SPACE).
+	tl := strings.TrimLeft(t, " ")
+	if len(t)-len(tl) <= 3 && (strings.HasPrefix(tl, "{::") || strings.HasPrefix(tl, "{:/")) {
 		return "", false
 	}
 	if m := reBlockIAL.FindStringSubmatch(t); m != nil {

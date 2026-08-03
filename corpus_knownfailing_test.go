@@ -38,13 +38,9 @@ var knownFailing = map[string]bool{
 	"block/08_list/mixed.text":               true,
 	"block/08_list/other_first_element.text": true,
 
-	// block/10_ald (1)
-	"block/10_ald/simple.text": true,
-
-	// block/11_ial (3)
-	"block/11_ial/auto_id_and_ial.text": true,
-	"block/11_ial/nested.text":          true,
-	"block/11_ial/simple.text":          true,
+	// block/11_ial (2)
+	"block/11_ial/nested.text": true,
+	"block/11_ial/simple.text": true,
 
 	// block/12_extension (2)
 	// options: needs parse_block_html/parse_span_html (the HTML5 front-end).
@@ -103,9 +99,6 @@ var knownFailing = map[string]bool{
 	"span/extension/comment.text":    true,
 	"span/extension/nomarkdown.text": true,
 	"span/extension/options.text":    true,
-
-	// span/ial (1)
-	"span/ial/simple.text": true,
 
 	// span/line_breaks (1)
 	"span/line_breaks/normal.text": true,

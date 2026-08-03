@@ -145,7 +145,13 @@ var reSpanIAL = regexp.MustCompile(`^\{:([^}]*)\}`)
 func (sp *spanParser) push(el *Element, n int) {
 	sp.out = append(sp.out, el)
 	sp.pos += n
-	if m := reSpanIAL.FindStringSubmatch(sp.src[sp.pos:]); m != nil {
+	// Consume every span IAL that immediately follows (they accumulate onto the same
+	// element); a "{::…}" extension or "{:/…}" stop tag is not a span IAL.
+	for {
+		m := reSpanIAL.FindStringSubmatch(sp.src[sp.pos:])
+		if m == nil || strings.HasPrefix(m[1], ":") || strings.HasPrefix(m[1], "/") {
+			break
+		}
 		applyIALToElement(el, m[1], sp.p.aldDefs)
 		sp.pos += len(m[0])
 	}
