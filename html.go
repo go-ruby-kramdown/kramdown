@@ -21,6 +21,19 @@ type htmlConverter struct {
 	footRefs  map[string]int // id -> how many times referenced (for backlinks)
 	footDefs  map[string]*Element
 	footLoc   string // non-empty sentinel marking a {:footnotes} placement site
+
+	tocLoc     string      // non-empty sentinel marking a {:toc} placement site
+	tocTag     string      // the tagged list's tag ("ul"/"ol") for the generated TOC
+	tocAttrs   []Attr      // the tagged list's attributes, carried onto the TOC root
+	tocEntries []tocHeader // headers collected for the TOC, in document order
+}
+
+// tocHeader is one heading gathered for the table of contents: its level, its final
+// id (the link target) and the raw source used to render the entry's link text.
+type tocHeader struct {
+	level int
+	id    string
+	raw   string
 }
 
 // footnoteSentinel is the placeholder a {:footnotes}-tagged list renders to; at the
@@ -63,6 +76,12 @@ func (c *htmlConverter) convert() string {
 		out = strings.Replace(out, c.footLoc, fc, 1)
 	} else {
 		out += fc
+	}
+	if c.tocLoc != "" {
+		// A {:toc} directive: substitute the generated table of contents for the
+		// sentinel the tagged list rendered to (kramdown's convert_root toc sub!). An
+		// empty TOC (no in-scope headers) drops the sentinel.
+		out = strings.Replace(out, c.tocLoc, c.generateTOC(), 1)
 	}
 	return out
 }
@@ -256,6 +275,12 @@ func (c *htmlConverter) convertHeader(e *Element, b *strings.Builder, indent int
 		if id, ok := e.getAttr("id"); ok && id != "" {
 			inner = `<a href="` + escapeHTMLAttr("#"+id) + `"></a>` + inner
 		}
+	}
+	// Collect the header for a pending {:toc}: kramdown's convert_header records
+	// [level, id, children] when the header has an id and is in scope (its level is a
+	// toc_level and it is not tagged {:.no_toc}).
+	if id, ok := e.getAttr("id"); ok && id != "" && c.inTOC(e, level) {
+		c.tocEntries = append(c.tocEntries, tocHeader{level: level, id: id, raw: raw})
 	}
 	tag := "h" + strconv.Itoa(outputHeaderLevel(level, c.doc.Opts.HeaderOffset))
 	b.WriteString(ind(indent) + "<" + tag + c.attrStr(e) + ">" + inner + "</" + tag + ">\n")
@@ -464,6 +489,17 @@ func (c *htmlConverter) convertList(e *Element, b *strings.Builder, indent int) 
 	tag := "ul"
 	if e.Type == ElOL {
 		tag = "ol"
+	}
+	// A list carrying the {:toc} IAL reference is replaced by the generated table of
+	// contents at this location (kramdown's convert_ul toc branch): remember the
+	// tagged list's tag and attributes for the TOC root and emit a sentinel that
+	// convert() substitutes once every header has been collected.
+	if c.tocLoc == "" && ialHasRef(e, "toc") {
+		c.tocLoc = tocSentinel
+		c.tocTag = tag
+		c.tocAttrs = e.Attrs
+		b.WriteString(tocSentinel)
+		return
 	}
 	b.WriteString(pad + "<" + tag + c.attrStr(e) + ">\n")
 	for _, li := range e.Children {

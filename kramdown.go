@@ -102,6 +102,10 @@ type Options struct {
 	// one CJK "word" per line renders as unbroken text. Mirrors kramdown's
 	// :remove_line_breaks_for_cjk option (default false).
 	RemoveLineBreaksForCJK bool
+	// TocLevels lists the header levels included in a {:toc} table of contents
+	// (kramdown's :toc_levels). An empty/nil value means kramdown's default of every
+	// level 1..6; e.g. []int{2, 3} restricts the TOC to h2 and h3.
+	TocLevels []int
 	// TypographicSymbols overrides the replacement string kramdown emits for a named
 	// typographic symbol (hellip, mdash, ndash, laquo, raquo, laquo_space,
 	// raquo_space, lsquo, rsquo, ldquo, rdquo). A present entry is HTML-escaped and
