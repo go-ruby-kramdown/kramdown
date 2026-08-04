@@ -39,8 +39,10 @@ func TestATXHeaders(t *testing.T) {
 	eq(t, "## Title {#custom}\n", "<h2 id=\"custom\">Title</h2>\n")
 	// A bare "#" with no text is a paragraph.
 	eq(t, "#\n", "<p>#</p>\n")
-	// A trailing "#" attached with no space stays literal.
-	eq(t, "# a#\n", "<h1 id=\"a\">a#</h1>\n")
+	// A trailing "#" is a closing-hash run and is stripped even without a space.
+	eq(t, "# a#\n", "<h1 id=\"a\">a</h1>\n")
+	// An ATX header needs no space after the "#"s (kramdown allows "#word").
+	eq(t, "#word\n", "<h1 id=\"word\">word</h1>\n")
 }
 
 // TestSetextHeaders covers "=" (h1) and "-" (h2) underlines and a {#id} on the
