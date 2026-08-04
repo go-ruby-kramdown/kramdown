@@ -8,6 +8,12 @@ package kramdown
 // Kramdown::Document.new. Only the options that influence the HTML output of the
 // supported feature set are honoured; the rest are tolerated for API parity.
 type Options struct {
+	// Input selects the parser dialect, mirroring kramdown's :input option (the name
+	// of a Kramdown::Parser subclass). The empty value and "kramdown" select the
+	// default kramdown parser; "GFM" selects the GitHub-Flavored-Markdown dialect,
+	// which (among other things) renders "- [ ] "/"- [x] " list items as task-list
+	// checkboxes. Only the task-list behaviour of the GFM parser is honoured here.
+	Input string
 	// AutoIds, when true (kramdown's default), assigns a generated id="" to every
 	// header that lacks an explicit {#id}.
 	AutoIds bool

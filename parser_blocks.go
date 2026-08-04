@@ -435,6 +435,11 @@ func (p *parser) parseList(lines []string, start int, parent *Element) int {
 		list.addChild(li)
 	}
 	parent.addChild(list)
+	// Under the GFM dialect, rewrite "[ ] "/"[x] " item markers into task-list
+	// checkboxes (kramdown-parser-gfm's parse_list override).
+	if p.opts.Input == "GFM" {
+		applyGFMTaskList(list)
+	}
 	// kramdown re-emits the last item's trailing blank as a separator after the
 	// list, unless an EOB marker closed it.
 	if finalizeListItems(list, eobFound) && !eobFound {
