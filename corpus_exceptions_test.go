@@ -13,18 +13,17 @@ package kramdown
 // should graduate out. Each bucket documents WHY it diverges.
 var corpusExceptions = map[string]bool{
 
-	// --- htmlparse (21): HTML-input parsing still blocked on the html_to_native
-	// mapping or span-level HTML. The raw content model, the block/span content models
-	// (:parse_block_html) and the markdown="…" attribute are ported — parse_block_html /
-	// parse_as_span / html_and_codeblocks / content_model/{deflists,tables} /
-	// invalid_html_1 / markdown_attr have graduated. simple stays only on the
-	// entity-output divergence (its "&nbsp;" is emitted as the named entity, not the
+	// --- htmlparse (12): HTML-input parsing still blocked on the html_to_native
+	// mapping. The raw content model, the block/span content models (:parse_block_html),
+	// the markdown="…" attribute and the span-level HTML front-end (parse_span_html) are
+	// ported — parse_block_html / parse_as_span / html_and_codeblocks /
+	// content_model/{deflists,tables} / invalid_html_1 / markdown_attr / cdata_section /
+	// comment / span/05_html/* / empty_tag_in_cell have graduated. simple stays only on
+	// the entity-output divergence (its "&nbsp;" is emitted as the named entity, not the
 	// U+00A0 character — an entityout concern, below). These remaining ones need
-	// html_to_native (ElementConverter) or span-level HTML (parse_span_html) — layered
-	// on in later clusters.
+	// html_to_native (ElementConverter, cluster 3) or the script/style verbatim body
+	// (parse_as_raw, cluster 5).
 	"block/03_paragraph/with_html_to_native.text":    true,
-	"block/09_html/cdata_section.text":               true,
-	"block/09_html/comment.text":                     true,
 	"block/09_html/html_to_native/code.text":         true,
 	"block/09_html/html_to_native/comment.text":      true,
 	"block/09_html/html_to_native/emphasis.text":     true,
@@ -36,13 +35,6 @@ var corpusExceptions = map[string]bool{
 	"block/09_html/html_to_native/typography.text":   true,
 	"block/09_html/parse_as_raw.text":                true,
 	"block/09_html/simple.text":                      true,
-	"block/14_table/empty_tag_in_cell.text":          true,
-	"span/05_html/across_lines.text":                 true,
-	"span/05_html/invalid.text":                      true,
-	"span/05_html/markdown_attr.text":                true,
-	"span/05_html/normal.text":                       true,
-	"span/05_html/raw_span_elements.text":            true,
-	"span/05_html/xml.text":                          true,
 
 	// --- entityout (9): entity_output modes (:numeric / :symbolic / :as_input / :as_char) plus custom
 	// smart_quotes specs. The gem re-encodes every character entity according to a

@@ -71,9 +71,18 @@ func (c *htmlConverter) typoWalk(els []*Element, prevChar string) []*Element {
 			if last != "" {
 				prevChar = last
 			}
-		case ElCodespan, ElRawHTMLSpan:
+		case ElCodespan, ElRawHTMLSpan, ElXMLComment, ElXMLPI:
 			out = append(out, e)
 			prevChar = "x" // a code span counts as a word char for following quotes
+		case ElHTMLElement:
+			// A span content model body was parsed as Markdown, so typographic
+			// substitution applies to it; a raw content model body is verbatim text and
+			// must not be transformed (its "--" / quotes stay literal).
+			if e.Options["content_model"] != cmRaw {
+				e.Children = c.typoWalk(e.Children, prevChar)
+			}
+			out = append(out, e)
+			prevChar = "x"
 		default:
 			e.Children = c.typoWalk(e.Children, prevChar)
 			out = append(out, e)

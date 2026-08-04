@@ -320,12 +320,12 @@ var (
 	// construct like <[a](b)> is left literal (and its inner markdown link parsed),
 	// matching kramdown 2.5.2.
 	reAutoEmail = regexp.MustCompile(`^<([^>\s@()\[\]]+@[^>\s()\[\]]+\.[^>\s()\[\]]+)>`)
-	reHTMLSpan  = regexp.MustCompile(`^<(/?[a-zA-Z][a-zA-Z0-9]*(?:\s[^>]*)?/?)>`)
 )
 
-// tryAutolinkOrHTML parses an <url>/<email> autolink or a raw inline HTML tag at
-// "<".
-func (sp *spanParser) tryAutolinkOrHTML() (*Element, int) {
+// tryAutolink parses an <url>/<email> autolink at "<", returning the element and
+// the number of source bytes consumed, or nil when the "<" opens neither. Raw
+// inline HTML is handled separately by trySpanHTML (kramdown's parse_span_html).
+func (sp *spanParser) tryAutolink() (*Element, int) {
 	s := sp.src[sp.pos:]
 	if m := reAutoURL.FindStringSubmatch(s); m != nil {
 		url := m[1]
@@ -350,50 +350,6 @@ func (sp *spanParser) tryAutolinkOrHTML() (*Element, int) {
 		el.addChild(t)
 		el.Options["autolink"] = true
 		el.Options["email"] = true
-		return el, len(m[0])
-	}
-	if m := reHTMLSpan.FindStringSubmatch(s); m != nil {
-		tag := m[1]
-		name := strings.ToLower(strings.TrimPrefix(tag, "/"))
-		if i := strings.IndexAny(name, " \t/"); i >= 0 {
-			name = name[:i]
-		}
-		if tag[0] == '/' {
-			// A close tag balancing an earlier start tag passes through verbatim; a
-			// stray close tag with no matching open is invalid — kramdown warns and
-			// emits it as escaped text (parse_span_html's close-tag branch).
-			if sp.openHTML[name] > 0 {
-				sp.openHTML[name]--
-				el := newEl(ElRawHTMLSpan)
-				el.Value = "<" + tag + ">"
-				return el, len(m[0])
-			}
-			sp.p.warn("Found invalidly used HTML closing tag for '" + name + "'")
-			t := newEl(ElText)
-			t.Value = "<" + tag + ">"
-			return t, len(m[0])
-		}
-		selfClose := strings.HasSuffix(strings.TrimSpace(tag), "/")
-		// With parse_span_html disabled, a raw inline element's body is not parsed:
-		// swallow it up to the matching close tag and pass the whole element through
-		// verbatim (kramdown sets the element's content model to :raw in this case).
-		if !sp.p.opts.ParseSpanHTML && !selfClose {
-			closeTag := "</" + name + ">"
-			if idx := strings.Index(s[len(m[0]):], closeTag); idx >= 0 {
-				whole := s[:len(m[0])+idx+len(closeTag)]
-				el := newEl(ElRawHTMLSpan)
-				el.Value = whole
-				return el, len(whole)
-			}
-		}
-		if !selfClose && !htmlElementsWithoutBody[name] {
-			if sp.openHTML == nil {
-				sp.openHTML = map[string]int{}
-			}
-			sp.openHTML[name]++
-		}
-		el := newEl(ElRawHTMLSpan)
-		el.Value = "<" + m[1] + ">"
 		return el, len(m[0])
 	}
 	return nil, 0
