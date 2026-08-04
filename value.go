@@ -73,6 +73,9 @@ const (
 	ElRaw
 	// ElFootnoteDef collects a footnote definition's blocks (never rendered inline).
 	ElFootnoteDef
+	// ElMath is a display ("$$…$$") math block; Value holds the LaTeX source. With
+	// kramdown's default MathJax engine it renders unindented as "\[value\]".
+	ElMath
 
 	// --- span elements ---
 

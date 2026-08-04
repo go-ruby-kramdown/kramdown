@@ -102,6 +102,10 @@ func (c *htmlConverter) convertBlock(e *Element, b *strings.Builder, indent int)
 		c.convertDL(e, b, indent)
 	case ElTable:
 		c.convertTable(e, b, indent)
+	case ElMath:
+		// kramdown's default MathJax engine renders a display-math block unindented
+		// as "\[value\]" regardless of nesting (convert_math -> MathEngine::Mathjax).
+		b.WriteString("\\[" + escapeMathValue(e.Value) + "\\]\n")
 	case ElHTMLBlock:
 		b.WriteString(pad + e.Value + "\n")
 	case ElComment:

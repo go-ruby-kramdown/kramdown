@@ -228,6 +228,9 @@ func (p *parser) parseOneBlock(lines []string, i int, parent *Element, atBoundar
 		return p.parseList(lines, i, parent)
 	}
 	if atBoundary {
+		if n, ok := p.parseBlockMath(lines, i, parent); ok {
+			return n
+		}
 		if tbl, n := p.tryTable(lines, i); tbl != nil {
 			parent.addChild(tbl)
 			return n

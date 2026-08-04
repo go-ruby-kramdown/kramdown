@@ -62,6 +62,13 @@ func (p *parser) harvestDefinitions(lines []string) []string {
 			for len(body) > 0 && strings.TrimSpace(body[len(body)-1]) == "" {
 				body = body[:len(body)-1]
 			}
+			// When the marker line carries no same-line content, kramdown's captured
+			// body begins with the newline after "]:", so parse_blocks sees a leading
+			// blank line (an :blank element). Reproduce it: a footnote whose content
+			// starts on the next line renders a leading blank inside its <li>.
+			if first == "" {
+				body = append([]string{""}, body...)
+			}
 			fn := newEl(ElFootnoteDef)
 			p.parseBlocks(body, fn)
 			// An IAL right after attaches to the definition (ignored for HTML here).
@@ -71,6 +78,11 @@ func (p *parser) harvestDefinitions(lines []string) []string {
 				}
 			}
 			p.footDefs[id] = fn
+			// kramdown leaves an ":eob :footnote_def" element where the definition was;
+			// like a link definition it is a block boundary, so it terminates a
+			// preceding list and separates blocks that would otherwise merge (two lists
+			// split by a footnote definition stay two tight lists).
+			out = append(out, defBoundaryMarker)
 			continue
 		}
 		// Link/image reference definition: "[id]: url "title"" (title may continue

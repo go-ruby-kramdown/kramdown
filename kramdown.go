@@ -34,6 +34,11 @@ type Options struct {
 	// with "%s" replaced by the footnote number; empty means the bare number
 	// (default "").
 	FootnoteLinkText string
+	// FootnoteBacklinkInline, when true, appends each footnote's back-link to the
+	// last paragraph or header reached by descending the note's final-child chain
+	// (kramdown's :footnote_backlink_inline), rather than only when the note's last
+	// block is itself a paragraph (default false).
+	FootnoteBacklinkInline bool
 	// SyntaxHighlighter selects the code highlighter. "rouge" (kramdown's default)
 	// routes code blocks/spans through the pure-Go go-ruby-rouge lexers; any other
 	// value ("", "null", "minted", …) leaves them as plain <pre><code>.
