@@ -189,6 +189,36 @@ func (hp *htmlParser) blockHTML(tree *Element) bool {
 	return true
 }
 
+// handleRawHTMLTag ports kramdown's handle_raw_html_tag: it consumes el's body
+// verbatim up to its matching close tag (case-insensitive) and stores it as a single
+// unescaped :raw text child, then consumes the close tag. If no close tag is found the
+// rest of the input becomes the body and the element is auto-closed.
+func (hp *htmlParser) handleRawHTMLTag(el *Element) {
+	sc := hp.sc
+	re := regexp.MustCompile(`(?i)</` + regexp.QuoteMeta(el.Value) + `\s*>`)
+	rest := sc.rest()
+	if loc := re.FindStringIndex(rest); loc != nil {
+		addRawText(el, rest[:loc[0]])
+		sc.pos += loc[1]
+		return
+	}
+	addRawText(el, rest)
+	sc.terminate()
+	hp.p.warn("Found no end tag for '" + el.Value + "' - auto-closing it")
+}
+
+// addRawText appends text to el as a verbatim (unescaped) :text child — kramdown's
+// add_text(..., :raw). The rendered output writes Value as-is.
+func addRawText(el *Element, text string) {
+	if text == "" {
+		return
+	}
+	t := newEl(ElText)
+	t.Value = text
+	t.Options["verbatim"] = true
+	el.addChild(t)
+}
+
 // handleStartTag reproduces handle_html_start_tag: it builds the :html_element,
 // appends it to tree, and (for void elements) marks it closed. It returns the created
 // element without yet parsing its body. Value normalisation and attribute lower-casing
@@ -245,8 +275,22 @@ func (hp *htmlParser) handleKramdownHTMLTag(el, tree *Element) {
 			cm = cmBlock
 		}
 	}
-	// NOTE: script/style have their verbatim-body (handle_raw_html_tag) special case,
-	// layered on in a later cluster.
+	// script and style take their body verbatim (kramdown's handle_raw_html_tag): the
+	// whole run up to the matching close tag is one raw text child, never scanned for
+	// nested markup, so "<script>a<p>b</p></script>" and a "<style>x > y</style>" body
+	// are emitted unescaped. This is independent of the content model (always :raw).
+	if el.Value == "script" || el.Value == "style" {
+		el.Options["content_model"] = cmRaw
+		el.Options["is_closed"] = closed
+		if !closed {
+			hp.handleRawHTMLTag(el)
+		}
+		// kramdown yields script/style with handle_body=false, so it runs NONE of the
+		// TRAILING_WHITESPACE scans: the newline after the close tag survives as a blank
+		// line, which is why a block script/style is followed by an extra blank in the
+		// output (the trailing-newline quirk).
+		return
+	}
 	if cm == cmBlock {
 		hp.sc.scanRE(reTrailingWS)
 	}

@@ -22,6 +22,10 @@ func (c *htmlConverter) convertHTMLNode(e *Element, indent int, parent *Element)
 	case ElHTMLElement:
 		return c.convertHTMLElement(e, indent, parent)
 	default: // ElText
+		// A script/style body captured by handle_raw_html_tag is emitted verbatim.
+		if v, _ := e.Options["verbatim"].(bool); v {
+			return e.Value
+		}
 		return escapeHTMLText(e.Value)
 	}
 }
