@@ -20,12 +20,6 @@ var knownFailing = map[string]bool{
 	// in a global pre-pass, so the literal tab is no longer available.
 	"block/06_codeblock/whitespace.text": true,
 
-	// block/08_list (4)
-	"block/08_list/lazy_and_nested.text":     true,
-	"block/08_list/list_and_others.text":     true,
-	"block/08_list/mixed.text":               true,
-	"block/08_list/other_first_element.text": true,
-
 	// block/11_ial (2)
 	// nested: kramdown parses the "<div>…</div>" raw block as an HTML element and
 	// injects the leading/trailing IAL's class/id into the opening tag (and reparses
