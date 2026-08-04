@@ -70,11 +70,17 @@ func ind(n int) string { return strings.Repeat("  ", n) }
 
 // convertBlock renders one block element.
 func (c *htmlConverter) convertBlock(e *Element, b *strings.Builder, indent int) {
+	// A node produced by the :html_to_native transform renders through the dedicated
+	// child-based converter (its body is its converted children, not a raw string).
+	if hn, _ := e.Options["hnative"].(bool); hn {
+		b.WriteString(c.convertNativeBlock(e, indent))
+		return
+	}
 	pad := ind(indent)
 	switch e.Type {
 	case ElP:
 		raw, _ := e.Options["raw"].(string)
-		els := c.doc.parseSpansFor(raw)
+		els := c.parseSpansRender(raw)
 		// A paragraph whose sole content is a single image carrying the "standalone"
 		// IAL reference renders as an HTML5 <figure>/<figcaption> (kramdown's
 		// convert_standalone_image), not a <p>.
@@ -558,11 +564,25 @@ func (c *htmlConverter) renderSpans(e *Element, indent int) string {
 
 // renderRaw parses raw inline text and renders it to HTML.
 func (c *htmlConverter) renderRaw(raw string, indent int) string {
-	els := c.doc.parseSpansFor(raw)
+	els := c.parseSpansRender(raw)
 	els = c.applyTypography(els)
 	var b strings.Builder
 	c.renderSpanEls(els, &b, indent)
 	return b.String()
+}
+
+// parseSpansRender span-parses raw text for rendering, applying the :html_to_native
+// mapping to the parsed span elements when that option is on (kramdown runs the
+// ElementConverter right after parse_span_html; here span HTML is parsed lazily at
+// render time, so the mapping is applied at every span-render site).
+func (c *htmlConverter) parseSpansRender(raw string) []*Element {
+	els := c.doc.parseSpansFor(raw)
+	if c.doc.Opts.HtmlToNative {
+		for _, e := range els {
+			convertHTMLToNative(e)
+		}
+	}
+	return els
 }
 
 // parseSpansFor span-parses raw text using the document's harvested definitions.

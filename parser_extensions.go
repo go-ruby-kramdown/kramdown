@@ -132,6 +132,8 @@ func (p *parser) applyInlineOptions(attrRaw string) {
 			p.opts.ParseSpanHTML = val == "true"
 		case "parse_block_html":
 			p.opts.ParseBlockHTML = val == "true"
+		case "html_to_native":
+			p.opts.HtmlToNative = val == "true"
 		case "footnote_prefix":
 			p.opts.FootnotePrefix = val
 		case "syntax_highlighter":

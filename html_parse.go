@@ -129,6 +129,14 @@ func (p *parser) parseBlockHTML(lines []string, start int, parent *Element) (int
 	if !hp.blockHTML(tmp) {
 		return 0, false
 	}
+	// With :html_to_native the parsed block-HTML construct is mapped onto native
+	// elements before it joins the tree (kramdown runs ElementConverter.convert on the
+	// element just built).
+	if p.opts.HtmlToNative {
+		for _, c := range tmp.Children {
+			convertHTMLToNative(c)
+		}
+	}
 	parent.Children = append(parent.Children, tmp.Children...)
 	nl := strings.Count(src[:sc.pos], "\n")
 	// The line-based block driver splices whole lines. When the construct ends mid-line
