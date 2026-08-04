@@ -18,6 +18,11 @@ type Options struct {
 	SmartQuotes bool
 	// Typographic enables the --, ---, ... and <<>> substitutions (default true).
 	Typographic bool
+	// EntityOutput selects how a recognised HTML entity in span text is rendered. The
+	// default "as_char" emits the entity's character (except <, > and & which keep
+	// their input form); "as_input" (and any other value this port does not model)
+	// leaves the entity in its literal input form. kramdown's default is :as_char.
+	EntityOutput string
 	// HardWrap, when true, turns every soft newline into a <br />. Independent of
 	// this, a line ending in two spaces (or "\\") is always a hard break. kramdown's
 	// default is false.
@@ -91,6 +96,7 @@ func DefaultOptions() Options {
 		AutoIds:           true,
 		SmartQuotes:       true,
 		Typographic:       true,
+		EntityOutput:      "as_char",
 		HardWrap:          false,
 		FootnoteNr:        1,
 		FootnoteBacklink:  "&#8617;",

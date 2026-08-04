@@ -13,25 +13,6 @@ package kramdown
 // should graduate out. Each bucket documents WHY it diverges.
 var corpusExceptions = map[string]bool{
 
-	// --- htmlparse (4): the remaining HTML-input cases. The raw content model, the
-	// block/span content models (:parse_block_html), the markdown="…" attribute, the
-	// span-level HTML front-end (parse_span_html), the :html_to_native ElementConverter
-	// and the script/style verbatim body (parse_as_raw / handle_raw_html_tag) are
-	// ported — parse_block_html / parse_as_span / html_and_codeblocks /
-	// content_model/{deflists,tables} / invalid_html_1 / markdown_attr / cdata_section /
-	// comment / span/05_html/* / empty_tag_in_cell / parse_as_raw and
-	// html_to_native/{comment,emphasis,header,list_ol,list_ul,paragraph,typography}
-	// have graduated. simple stays only on the entity-output divergence (its "&nbsp;"
-	// is emitted as the named entity, not the U+00A0 character — an entityout concern,
-	// below). The remaining html_to_native cases need convert_code/convert_pre
-	// (codeblock, with the highlighter) and the simple-table native mapping — deferred
-	// to a later PR; with_html_to_native additionally needs the mid-line paragraph
-	// continuation of a block element followed by inline text.
-	"block/03_paragraph/with_html_to_native.text":    true,
-	"block/09_html/html_to_native/code.text":         true,
-	"block/09_html/html_to_native/table_simple.text": true,
-	"block/09_html/simple.text":                      true,
-
 	// --- entityout (9): entity_output modes (:numeric / :symbolic / :as_input / :as_char) plus custom
 	// smart_quotes specs. The gem re-encodes every character entity according to a
 	// runtime table of ~2000 named HTML entities; this port emits the default

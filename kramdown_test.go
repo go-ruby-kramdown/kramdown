@@ -350,10 +350,12 @@ func TestTypographicSymbols(t *testing.T) {
 	}
 }
 
-// TestEntities covers a literal entity pass-through.
+// TestEntities covers the default entity_output :as_char rendering: an entity whose
+// character is <, > or & keeps its input form, while any other entity (numeric, hex or
+// named) is emitted as its character — verified byte-for-byte against kramdown 2.5.2.
 func TestEntities(t *testing.T) {
 	eq(t, "a &amp; b\n", "<p>a &amp; b</p>\n")
-	eq(t, "&#169; &#x41;\n", "<p>&#169; &#x41;</p>\n")
+	eq(t, "&#169; &#x41;\n", "<p>© A</p>\n")
 	// A bare ampersand is escaped.
 	eq(t, "a & b\n", "<p>a &amp; b</p>\n")
 }

@@ -82,6 +82,8 @@ func applyCorpusOptions(o Options, text string) Options {
 			o.HtmlToNative = val == "true"
 		case "smart_quotes":
 			o.SmartQuotes = val != "false"
+		case "entity_output":
+			o.EntityOutput = strings.TrimPrefix(val, ":")
 		case "footnote_prefix":
 			o.FootnotePrefix = val
 		case "footnote_backlink":

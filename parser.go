@@ -376,12 +376,6 @@ func (p *parser) parseParagraph(lines []string, start int, parent *Element) int 
 			_ = ial
 			break
 		}
-		// Strip leading whitespace only from the first line (kramdown left-strips a
-		// paragraph's opening line; continuation lines keep their indentation). Keep
-		// trailing spaces so the span parser can detect hard line breaks ("  \n").
-		if len(buf) == 0 {
-			line = strings.TrimLeft(line, " \t")
-		}
 		buf = append(buf, line)
 		i++
 	}
@@ -390,10 +384,46 @@ func (p *parser) parseParagraph(lines []string, start int, parent *Element) int 
 	if len(buf) > 0 {
 		buf[len(buf)-1] = strings.TrimRight(buf[len(buf)-1], " \t")
 	}
+	// A paragraph that directly follows a native (:html_to_native) :p with no blank
+	// line between merges into it: kramdown's parse_paragraph appends the text to the
+	// preceding :p as a child rather than opening a new paragraph. This is the mid-line
+	// "block element then inline text" continuation (e.g. "<p>…</p> some text"). The
+	// leading whitespace of the trailing run is preserved, so the merge keeps buf's
+	// first line un-stripped.
+	if t := nativeParaMergeTarget(parent); t != nil {
+		t.addChild(textEl(strings.Join(buf, "\n")))
+		return i - start
+	}
+	// Strip leading whitespace only from the first line (kramdown left-strips a
+	// paragraph's opening line; continuation lines keep their indentation). Keep
+	// trailing spaces so the span parser can detect hard line breaks ("  \n").
+	if len(buf) > 0 {
+		buf[0] = strings.TrimLeft(buf[0], " \t")
+	}
 	para := newEl(ElP)
 	para.Options["raw"] = strings.Join(buf, "\n")
 	parent.addChild(para)
 	return i - start
+}
+
+// nativeParaMergeTarget returns the preceding sibling a following paragraph should
+// merge into: a native (:html_to_native) :p whose body is child-based. Only such a
+// paragraph can immediately precede another with no intervening blank line (two
+// Markdown paragraphs are always blank-separated and coalesced), so this is the sole
+// reachable continuation target.
+func nativeParaMergeTarget(parent *Element) *Element {
+	n := len(parent.Children)
+	if n == 0 {
+		return nil
+	}
+	last := parent.Children[n-1]
+	if last.Type != ElP {
+		return nil
+	}
+	if hn, _ := last.Options["hnative"].(bool); hn {
+		return last
+	}
+	return nil
 }
 
 // makeSetextHeader builds a header from collected paragraph lines and the

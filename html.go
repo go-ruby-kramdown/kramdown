@@ -309,7 +309,7 @@ func (c *htmlConverter) convertCodeblock(e *Element, b *strings.Builder, indent 
 	if lang != "" {
 		codeAttr = ` class="language-` + escapeHTMLAttr(lang) + `"`
 	}
-	body := escapeHTMLText(e.Value)
+	body := escapeHTMLTextAll(e.Value)
 	// The show-whitespaces class turns every space/tab into a marked <span>, so the
 	// whitespace is visible; kramdown chomps the trailing newline, rewrites the runs,
 	// then re-appends the newline (convert_codeblock).
@@ -553,7 +553,7 @@ func (c *htmlConverter) renderCodespan(e *Element, b *strings.Builder) {
 			return
 		}
 	}
-	b.WriteString("<code" + c.attrStr(e) + ">" + escapeHTMLText(e.Value) + "</code>")
+	b.WriteString("<code" + c.attrStr(e) + ">" + escapeHTMLTextAll(e.Value) + "</code>")
 }
 
 // renderSpans parses and renders e's raw text into inline HTML.
@@ -581,6 +581,9 @@ func (c *htmlConverter) parseSpansRender(raw string) []*Element {
 		for _, e := range els {
 			convertHTMLToNative(e)
 		}
+	}
+	if c.doc.Opts.EntityOutput == "as_char" {
+		convertTextEntities(els)
 	}
 	return els
 }
