@@ -13,13 +13,6 @@ package kramdown
 // should graduate out. Each bucket documents WHY it diverges.
 var corpusExceptions = map[string]bool{
 
-	// --- footnote (2): the {:footnotes} placement directive (render the footnote block
-	// at an explicit location instead of the end — placement) and the footnote/header
-	// ordering interaction (regexp_problem). Both depend on the footnote-location /
-	// header-numbering reworks that are out of scope for the entity-output cluster.
-	"span/04_footnote/placement.text":      true,
-	"span/04_footnote/regexp_problem.text": true,
-
 	// --- highlight (2): Syntax highlighting cases this port cannot yet close by wiring the
 	// pure-Go go-ruby-rouge highlighter. rouge/simple mixes a Ruby, an HTML and a
 	// PHP block; go-ruby-rouge ships no PHP lexer, so the third block's token spans
