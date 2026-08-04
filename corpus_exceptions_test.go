@@ -23,13 +23,4 @@ var corpusExceptions = map[string]bool{
 	// guess_lang, syntax_highlighter: null, disable flags) now pass via the wiring.
 	"block/06_codeblock/rouge/multiple.text": true,
 	"block/06_codeblock/rouge/simple.text":   true,
-
-	// --- math (4): Math via a math engine. The default MathJax engine's plain
-	// "\[…\]"/"\(…\)" wrapping is now supported for single-line block math (so
-	// gh_128 passes), but these remaining cases need the itex2mml/KaTeX or
-	// :math_engine ~ fallback markup, or multi-line/edge-case block+span handling.
-	"block/15_math/no_engine.text": true,
-	"block/15_math/normal.text":    true,
-	"span/math/no_engine.text":     true,
-	"span/math/normal.text":        true,
 }

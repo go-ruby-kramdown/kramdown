@@ -106,6 +106,13 @@ type Options struct {
 	// (kramdown's :toc_levels). An empty/nil value means kramdown's default of every
 	// level 1..6; e.g. []int{2, 3} restricts the TOC to h2 and h3.
 	TocLevels []int
+	// MathEngine selects how a "$$…$$" math element renders. "mathjax" (kramdown's
+	// default) wraps the LaTeX verbatim in MathJax delimiters — "\[…\]" for a block
+	// element, "\(…\)" for a span — with the value HTML-escaped; a math element that
+	// carries IAL attributes is wrapped in a <div>/<span> instead. An empty value
+	// (kramdown's :math_engine nil, the corpus' ":math_engine: ~") disables the engine:
+	// the raw LaTeX is emitted inside a <div>/<span class="kdmath"> as "$$…$$"/"$…$".
+	MathEngine string
 	// TypographicSymbols overrides the replacement string kramdown emits for a named
 	// typographic symbol (hellip, mdash, ndash, laquo, raquo, laquo_space,
 	// raquo_space, lsquo, rsquo, ldquo, rdquo). A present entry is HTML-escaped and
@@ -134,6 +141,7 @@ func DefaultOptions() Options {
 		FootnoteBacklink:  "&#8617;",
 		ParseSpanHTML:     true,
 		SyntaxHighlighter: "rouge",
+		MathEngine:        "mathjax",
 	}
 }
 

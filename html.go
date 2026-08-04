@@ -167,16 +167,39 @@ func (c *htmlConverter) convertBlock(e *Element, b *strings.Builder, indent int)
 	}
 }
 
-// convertMath renders a block "$$…$$" math element the way kramdown's default
-// MathJax engine does: the bare "\[value\]" at column 0, or — when the element
-// carries IAL attributes — wrapped in a <div> at the current indent.
+// convertMath renders a block "$$…$$" math element. With kramdown's default MathJax
+// engine it becomes the bare "\[value\]" at column 0 (value HTML-escaped), or — when
+// the element carries IAL attributes — that wrapped in a <div> at the current
+// indent. With the engine disabled (MathEngine == "") it is the raw LaTeX in a
+// <div class="kdmath">$$…$$</div>, mirroring convert_math's no-engine fallback.
 func (c *htmlConverter) convertMath(e *Element, b *strings.Builder, indent int) {
-	inner := `\[` + escapeHTMLText(e.Value) + `\]`
-	if len(e.Attrs) == 0 {
-		b.WriteString(inner + "\n")
+	if c.doc.Opts.MathEngine == "mathjax" {
+		inner := `\[` + escapeHTMLTextAll(e.Value) + `\]`
+		if len(e.Attrs) == 0 {
+			b.WriteString(inner + "\n")
+			return
+		}
+		b.WriteString(ind(indent) + "<div" + c.attrStr(e) + ">" + inner + "\n</div>\n")
 		return
 	}
-	b.WriteString(ind(indent) + "<div" + c.attrStr(e) + ">" + inner + "\n</div>\n")
+	attrs := attrListStr(withKdmathClass(e.Attrs))
+	b.WriteString(ind(indent) + "<div" + attrs + ">$$\n" + e.Value + "\n$$</div>\n")
+}
+
+// renderMathSpan renders an inline "$$…$$" math element. With the MathJax engine it
+// becomes "\(value\)" (value HTML-escaped), or — when it carries IAL attributes —
+// "<span …>$value$</span>" with the raw value. With the engine disabled it is the
+// raw "<span class="kdmath">$value$</span>", mirroring convert_math's fallback.
+func (c *htmlConverter) renderMathSpan(e *Element, b *strings.Builder) {
+	if c.doc.Opts.MathEngine == "mathjax" {
+		if len(e.Attrs) == 0 {
+			b.WriteString(`\(` + escapeHTMLTextAll(e.Value) + `\)`)
+			return
+		}
+		b.WriteString("<span" + c.attrStr(e) + ">$" + e.Value + "$</span>")
+		return
+	}
+	b.WriteString("<span" + attrListStr(withKdmathClass(e.Attrs)) + ">$" + e.Value + "$</span>")
 }
 
 // convertStandaloneImage renders a single-image paragraph as an HTML5 figure,
@@ -640,14 +663,40 @@ func hasBlankSep(els []*Element) bool {
 // attrStr renders an element's HTML attributes in emission order, dropping a blank
 // id exactly as kramdown's Utils::Html#html_attributes does.
 func (c *htmlConverter) attrStr(e *Element) string {
+	return attrListStr(e.Attrs)
+}
+
+// attrListStr renders an attribute slice in emission order, dropping a blank id
+// exactly as kramdown's Utils::Html#html_attributes does.
+func attrListStr(attrs []Attr) string {
 	var b strings.Builder
-	for _, a := range e.Attrs {
+	for _, a := range attrs {
 		if a.Name == "id" && strings.TrimSpace(a.Val) == "" {
 			continue
 		}
 		b.WriteString(" " + a.Name + `="` + escapeHTMLAttr(a.Val) + `"`)
 	}
 	return b.String()
+}
+
+// withKdmathClass returns attrs with kramdown's "kdmath" class appended — merged
+// into an existing class value (space-joined, left-stripped) or added as a new
+// class attribute in emission order. This mirrors the no-engine convert_math
+// fallback's `attr['class'] = "#{attr['class']} kdmath".lstrip`.
+func withKdmathClass(attrs []Attr) []Attr {
+	out := make([]Attr, 0, len(attrs)+1)
+	found := false
+	for _, a := range attrs {
+		if a.Name == "class" {
+			a.Val = strings.TrimLeft(a.Val+" kdmath", " ")
+			found = true
+		}
+		out = append(out, a)
+	}
+	if !found {
+		out = append(out, Attr{Name: "class", Val: "kdmath"})
+	}
+	return out
 }
 
 // renderCodespan renders an inline code span. With the Rouge highlighter enabled
@@ -735,6 +784,8 @@ func (c *htmlConverter) renderSpan(e *Element, b *strings.Builder, indent int) {
 		b.WriteString("<strong" + c.attrStr(e) + ">")
 		c.renderSpanEls(e.Children, b, indent)
 		b.WriteString("</strong>")
+	case ElMath:
+		c.renderMathSpan(e, b)
 	case ElCodespan:
 		c.renderCodespan(e, b)
 	case ElA:
