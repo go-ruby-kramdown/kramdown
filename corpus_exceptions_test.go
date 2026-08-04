@@ -59,8 +59,4 @@ var corpusExceptions = map[string]bool{
 	"block/16_toc/toc_levels.text":         true,
 	"block/16_toc/toc_with_footnotes.text": true,
 	"block/16_toc/toc_with_links.text":     true,
-
-	// --- translit (1): transliterated_header_ids — auto-ids built from Unicode-to-ASCII
-	// transliteration (the gem's stringex-style table).
-	"block/04_header/with_auto_ids.text": true,
 }
