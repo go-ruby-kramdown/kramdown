@@ -73,9 +73,19 @@ func (c *htmlConverter) convertBlock(e *Element, b *strings.Builder, indent int)
 	pad := ind(indent)
 	switch e.Type {
 	case ElP:
-		b.WriteString(pad + "<p" + c.attrStr(e) + ">")
-		b.WriteString(c.renderSpans(e, indent))
-		b.WriteString("</p>\n")
+		raw, _ := e.Options["raw"].(string)
+		els := c.doc.parseSpansFor(raw)
+		// A paragraph whose sole content is a single image carrying the "standalone"
+		// IAL reference renders as an HTML5 <figure>/<figcaption> (kramdown's
+		// convert_standalone_image), not a <p>.
+		if len(els) == 1 && els[0].Type == ElImg && ialHasRef(els[0], "standalone") {
+			c.convertStandaloneImage(e, els[0], b, indent)
+			return
+		}
+		els = c.applyTypography(els)
+		var sb strings.Builder
+		c.renderSpanEls(els, &sb, indent)
+		b.WriteString(pad + "<p" + c.attrStr(e) + ">" + sb.String() + "</p>\n")
 	case ElHeader:
 		c.convertHeader(e, b, indent)
 	case ElHR:
@@ -103,6 +113,71 @@ func (c *htmlConverter) convertBlock(e *Element, b *strings.Builder, indent int)
 			b.WriteString(e.Value + "\n")
 		}
 	}
+}
+
+// convertStandaloneImage renders a single-image paragraph as an HTML5 figure,
+// mirroring kramdown's convert_standalone_image. The figure inherits the
+// paragraph's own (block-IAL) attributes; the image's class/id are hoisted to the
+// figure only when the figure does not already carry that attribute, and every
+// other image attribute stays on the <img>.
+func (c *htmlConverter) convertStandaloneImage(p, img *Element, b *strings.Builder, indent int) {
+	pad := ind(indent)
+	inner := ind(indent + 1)
+	figAttr := append([]Attr(nil), p.Attrs...)
+	imgAttr := append([]Attr(nil), img.Attrs...)
+	// Hoist class then id (kramdown's order) from the image to the figure when the
+	// figure lacks that attribute; drop it from the image in that case.
+	for _, name := range []string{"class", "id"} {
+		if hasAttr(figAttr, name) {
+			continue
+		}
+		if v, rest, ok := takeAttr(imgAttr, name); ok {
+			figAttr = append(figAttr, Attr{Name: name, Val: v})
+			imgAttr = rest
+		}
+	}
+	alt, _ := attrVal(imgAttr, "alt")
+	b.WriteString(pad + "<figure" + attrsStr(figAttr) + ">\n")
+	b.WriteString(inner + "<img" + attrsStr(imgAttr) + " />\n")
+	b.WriteString(inner + "<figcaption>" + alt + "</figcaption>\n")
+	b.WriteString(pad + "</figure>\n")
+}
+
+// attrsStr renders an attribute slice as ` name="val"` pairs in order, escaping
+// each value like an HTML attribute.
+func attrsStr(attrs []Attr) string {
+	var b strings.Builder
+	for _, a := range attrs {
+		b.WriteString(" " + a.Name + `="` + escapeHTMLAttr(a.Val) + `"`)
+	}
+	return b.String()
+}
+
+// hasAttr reports whether attrs contains an attribute named name.
+func hasAttr(attrs []Attr, name string) bool {
+	_, ok := attrVal(attrs, name)
+	return ok
+}
+
+// attrVal returns the value of the named attribute and whether it is present.
+func attrVal(attrs []Attr, name string) (string, bool) {
+	for _, a := range attrs {
+		if a.Name == name {
+			return a.Val, true
+		}
+	}
+	return "", false
+}
+
+// takeAttr returns the value of the named attribute, the slice with that
+// attribute removed, and whether it was present (attrs unchanged if absent).
+func takeAttr(attrs []Attr, name string) (string, []Attr, bool) {
+	for i, a := range attrs {
+		if a.Name == name {
+			return a.Val, append(attrs[:i:i], attrs[i+1:]...), true
+		}
+	}
+	return "", attrs, false
 }
 
 // convertHeader renders an ATX/Setext header with its (explicit or generated) id.
