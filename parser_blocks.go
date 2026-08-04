@@ -73,6 +73,12 @@ func (p *parser) harvestDefinitions(lines []string) []string {
 			}
 			p.linkDefs[id] = linkDef{url: stripURLAngles(url), title: unquoteTitle(title)}
 			i++
+			// kramdown leaves an ":eob :link_def" element here; a following block that
+			// is not separated by a blank line is therefore NOT at a block boundary (a
+			// table directly beneath a link-reference definition stays a paragraph).
+			if i < len(lines) && strings.TrimSpace(lines[i]) != "" {
+				out = append(out, defBoundaryMarker)
+			}
 			continue
 		}
 		// A standalone block IAL immediately before an abbreviation definition

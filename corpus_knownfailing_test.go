@@ -27,6 +27,16 @@ var knownFailing = map[string]bool{
 	"block/08_list/other_first_element.text": true,
 
 	// block/11_ial (2)
+	// nested: kramdown parses the "<div>…</div>" raw block as an HTML element and
+	// injects the leading/trailing IAL's class/id into the opening tag (and reparses
+	// a "markdown=\"1\"" body), which needs the HTML-element block front-end this
+	// port renders verbatim instead. simple: needs deferred, nested ALD-reference
+	// resolution with kramdown's update_attr_with_ial ordering (refs resolved first;
+	// multiple "{:name: …}" ALD definitions accumulated rather than overwritten), a
+	// list terminated by a following standalone block IAL (its trailing indented
+	// lines becoming separate IAL-decorated code blocks), and accumulation of
+	// consecutive leading block IALs — core attribute-model/list reworks out of
+	// scope here.
 	"block/11_ial/nested.text": true,
 	"block/11_ial/simple.text": true,
 
@@ -35,13 +45,11 @@ var knownFailing = map[string]bool{
 	// (options3, which needed the rouge token markup, now passes via the go-ruby-rouge wiring.)
 	"block/12_extension/options.text": true,
 
-	// block/14_table (2)
-	// errors: a table directly after a harvested link-reference definition (no
-	// blank line) requires kramdown's after_block_boundary semantics, which this
-	// port's definition pre-pass does not model. simple: one row uses an unclosed
-	// inline <em> HTML element that kramdown auto-closes at the cell boundary
-	// (span-HTML content model), out of scope until the HTML front-end lands.
-	"block/14_table/errors.text": true,
+	// block/14_table (1)
+	// simple: one row uses an unclosed inline <em> HTML element that kramdown
+	// auto-closes at the cell boundary (span-HTML content model), rendering the
+	// stray "</em>" in the next cell as escaped text; out of scope until the span
+	// HTML front-end lands.
 	"block/14_table/simple.text": true,
 
 	// encoding.text (1)
