@@ -38,6 +38,7 @@ func applyCorpusOptions(o Options, text string) Options {
 	sc := bufio.NewScanner(strings.NewReader(text))
 	inSHOpts := false   // inside the :syntax_highlighter_opts subtree
 	inTypoSyms := false // inside the :typographic_symbols subtree
+	inLinkDefs := false // inside the :link_defs subtree
 	subCtx := ""        // "block"/"span" nested map, or "" at the opts' top level
 	for sc.Scan() {
 		line := sc.Text()
@@ -50,10 +51,12 @@ func applyCorpusOptions(o Options, text string) Options {
 				applyCorpusSHOptsLine(&o.SyntaxHighlighterOpts, line, &subCtx)
 			case inTypoSyms:
 				applyCorpusTypoSymLine(&o.TypographicSymbols, line)
+			case inLinkDefs:
+				applyCorpusLinkDefLine(o.LinkDefs, line)
 			}
 			continue // nested value of an unmodelled option
 		}
-		inSHOpts, inTypoSyms, subCtx = false, false, ""
+		inSHOpts, inTypoSyms, inLinkDefs, subCtx = false, false, false, ""
 		line = strings.TrimPrefix(line, ":") // ruby symbol key marker
 		key, val, ok := strings.Cut(line, ":")
 		if !ok {
@@ -90,9 +93,32 @@ func applyCorpusOptions(o Options, text string) Options {
 		case "typographic_symbols":
 			inTypoSyms = true
 			o.TypographicSymbols = map[string]string{}
+		case "link_defs":
+			inLinkDefs = true
+			o.LinkDefs = map[string]LinkDef{}
 		}
 	}
 	return o
+}
+
+// applyCorpusLinkDefLine folds one indented "id: [url, title]" line of a
+// :link_defs block into m, mirroring kramdown's option: the value is a YAML array
+// whose first element is the URL and optional second element the title.
+func applyCorpusLinkDefLine(m map[string]LinkDef, line string) {
+	key, val, ok := strings.Cut(strings.TrimSpace(line), ":")
+	if !ok {
+		return
+	}
+	key = strings.TrimSpace(key)
+	val = strings.TrimSpace(val)
+	val = strings.TrimPrefix(val, "[")
+	val = strings.TrimSuffix(val, "]")
+	parts := strings.SplitN(val, ",", 2)
+	def := LinkDef{URL: strings.TrimSpace(parts[0])}
+	if len(parts) > 1 {
+		def.Title = strings.TrimSpace(parts[1])
+	}
+	m[key] = def
 }
 
 // applyCorpusTypoSymLine folds one indented "name: value" line of a

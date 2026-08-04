@@ -64,27 +64,36 @@ func normalize(src string) string {
 	return src
 }
 
-// expandTabs replaces tabs with spaces to the next 4-column tab stop, matching
-// kramdown's leading-whitespace handling for block detection.
+// expandTabs replaces tabs in a line's leading whitespace with spaces to the next
+// 4-column tab stop, so block-level indentation detection works on space counts.
+// Only the leading run is expanded: kramdown's adapt_source never expands tabs, so
+// a literal tab inside content (e.g. within a link's text) is preserved verbatim.
 func expandTabs(line string) string {
 	if !strings.Contains(line, "\t") {
 		return line
 	}
+	lead := 0
+	for lead < len(line) && (line[lead] == ' ' || line[lead] == '\t') {
+		lead++
+	}
+	if !strings.Contains(line[:lead], "\t") {
+		return line // no tab in the leading whitespace: nothing to expand
+	}
 	var b strings.Builder
 	col := 0
-	for _, r := range line {
-		if r == '\t' {
+	for i := 0; i < lead; i++ {
+		if line[i] == '\t' {
 			n := 4 - col%4
-			for i := 0; i < n; i++ {
+			for k := 0; k < n; k++ {
 				b.WriteByte(' ')
 			}
 			col += n
 		} else {
-			b.WriteRune(r)
+			b.WriteByte(' ')
 			col++
 		}
 	}
-	return b.String()
+	return b.String() + line[lead:]
 }
 
 // parse drives the whole parse: a definition pre-pass strips link/abbrev/ALD/
@@ -97,6 +106,11 @@ func (p *parser) parse() *Element {
 	}
 	for i := range lines {
 		lines[i] = expandTabs(lines[i])
+	}
+	// Predefined link definitions (the :link_defs option) seed the table before the
+	// source's own definitions, which may override them.
+	for id, d := range p.opts.LinkDefs {
+		p.linkDefs[normalizeRef(id)] = linkDef{url: d.URL, title: d.Title}
 	}
 	lines = p.harvestDefinitions(lines)
 	root := newEl(ElRoot)
@@ -161,7 +175,10 @@ var (
 	reATXNoSpace = regexp.MustCompile(`^(#{1,6})$`)
 	reSetext     = regexp.MustCompile(`^(=+|-+)\s*$`)
 	reSetextPure = regexp.MustCompile(`^ {0,3}(=+|-+)[ \t]*$`)
-	reHR         = regexp.MustCompile(`^ {0,3}((\* *){3,}|(- *){3,}|(_ *){3,})$`)
+	// reHR allows tabs as well as spaces between the rule characters (kramdown's
+	// HR_START uses [ \t]*), so a tab-separated "-\t-\t-" is a horizontal rule even
+	// though content tabs are no longer expanded to spaces.
+	reHR         = regexp.MustCompile(`^ {0,3}((\*[ \t]*){3,}|(-[ \t]*){3,}|(_[ \t]*){3,})$`)
 	reBlockIAL   = regexp.MustCompile(`^ {0,3}\{:(?:: *)?((?:\\\}|[^}])*)\}\s*$`)
 	reIndentCode = regexp.MustCompile(`^( {4}|\t)`)
 	// reLazyCodeJoin folds a lazily-continued (0-3 space) code line onto the

@@ -49,17 +49,6 @@ var knownFailing = map[string]bool{
 	// encoding.text (1)
 	"encoding.text": true,
 
-	// span/01_link (2)
-	// link_defs + reference need kramdown's block-boundary-aware link-definition
-	// parser (bare URLs containing spaces, the "space before a quote" invalidation
-	// guard, definitions harvested only at a block boundary rather than mid-paragraph,
-	// multi-line titles, the predefined :link_defs option, and literal-tab
-	// preservation) — a block-parser rework tracked separately. The inline/reference
-	// span algorithm, angle-bracket destinations, nested-image alt and per-definition
-	// IAL now match the gem.
-	"span/01_link/link_defs.text": true,
-	"span/01_link/reference.text": true,
-
 	// span/abbreviations (2)
 	"span/abbreviations/abbrev.text":         true,
 	"span/abbreviations/abbrev_in_html.text": true,
