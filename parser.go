@@ -20,12 +20,16 @@ type parser struct {
 	aldDefs  map[string]string // ALD id -> raw attribute string
 	footDefs map[string]*Element
 	warnings []string
+	// noLinks is set while span-parsing the text of a link, where kramdown forbids
+	// a nested <a> (but still allows a nested image), mirroring its parse_link guard.
+	noLinks bool
 }
 
 // linkDef is a reference-style link/image definition: [id]: url "title".
 type linkDef struct {
 	url   string
 	title string
+	ial   string // raw IAL attribute string attached to the definition, if any
 }
 
 // abbrevDef is an abbreviation definition: *[text]: title.

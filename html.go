@@ -576,20 +576,18 @@ func (c *htmlConverter) renderLink(e *Element, b *strings.Builder, indent int) {
 	b.WriteString("</a>")
 }
 
-// renderImage renders an <img /> with src/alt/title in kramdown's order.
+// renderImage renders an <img /> emitting its attributes in kramdown's insertion
+// order: an inline image sets src/alt/title first (a span IAL then appends its
+// class last), while a reference image applies its definition's IAL first (so the
+// class precedes src/alt) — mirroring the gem's add_link.
 func (c *htmlConverter) renderImage(e *Element, b *strings.Builder) {
-	src, _ := e.getAttr("src")
-	alt, _ := e.getAttr("alt")
-	b.WriteString(`<img src="` + escapeHref(src) + `" alt="` + escapeHTMLAttr(alt) + `"`)
-	if title, ok := e.getAttr("title"); ok {
-		b.WriteString(` title="` + escapeHTMLAttr(title) + `"`)
-	}
-	// any extra IAL attrs
+	b.WriteString("<img")
 	for _, a := range e.Attrs {
-		if a.Name == "src" || a.Name == "alt" || a.Name == "title" {
-			continue
+		v := escapeHTMLAttr(a.Val)
+		if a.Name == "src" {
+			v = escapeHref(a.Val)
 		}
-		b.WriteString(" " + a.Name + `="` + escapeHTMLAttr(a.Val) + `"`)
+		b.WriteString(" " + a.Name + `="` + v + `"`)
 	}
 	b.WriteString(" />")
 }
