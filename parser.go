@@ -193,29 +193,74 @@ var (
 	reBlockquote      = regexp.MustCompile(`^ {0,3}> ?(.*)$`)
 	reHeaderID        = regexp.MustCompile(`[ \t]+\{#([A-Za-z][\w:-]*)\}[ \t]*$`)
 	reDefMarker       = regexp.MustCompile(`^( {0,3})(:)(\s+)(.*)$`)
-	// reBlockMath matches a whole-line "$$…$$" block-math element (kramdown's
-	// BLOCK_MATH_START restricted to a single line): optional 0-3 space indent, an
-	// optional escaping backslash, the "$$"-delimited LaTeX, then only trailing space.
-	reBlockMath = regexp.MustCompile(`^ {0,3}(\\?)\$\$(.*)\$\$[ \t]*$`)
+	// reBlockMath matches kramdown's BLOCK_MATH_START = /^OPT_SPACE(\\)?\$\$(.*?)\$\$/m
+	// at the start of the remaining source: 0-3 space indent, an optional escaping
+	// backslash, then the "$$"-delimited LaTeX captured non-greedily and across
+	// newlines ((?s)) so a multi-line "$$\begin…\end$$" is one element. The trailing
+	// boundary (kramdown's (\s*?\n)? plus before_block_boundary?) is enforced
+	// separately in tryBlockMath.
+	reBlockMath = regexp.MustCompile(`(?s)^ {0,3}(\\?)\$\$(.*?)\$\$`)
 )
 
-// tryBlockMath parses a single-line "$$…$$" math block when it stands alone at a
-// block boundary (the following line is blank or the input ends), mirroring
-// kramdown's parse_block_math. It returns nil for an escaped "\$$", for inline
-// "$$…$$" trailed by text, or when the next line is not a boundary, leaving those
-// to paragraph parsing (where they may be inline math or literal text).
-func (p *parser) tryBlockMath(lines []string, i int) (*Element, int) {
-	m := reBlockMath.FindStringSubmatch(lines[i])
-	if m == nil || m[1] != "" {
-		return nil, 0
+// tryBlockMath parses a "$$…$$" math block (possibly spanning several source
+// lines) that stands alone at a block boundary, mirroring kramdown's
+// parse_block_math. The math is accepted only when the closing "$$" ends its line
+// (nothing but horizontal whitespace after it) and the following line is itself a
+// block boundary — a blank line, an EOB "^" marker, a block IAL ("{:…}"), or the
+// end of input (kramdown's before_block_boundary?). It returns:
+//
+//   - el != nil, consumed>0: a block :math element spanning consumed lines.
+//   - stripped != "", ok=false: a leading-backslash "\$$…$$" that ends its line —
+//     kramdown consumes the backslash and reparses the rest as a paragraph
+//     (yielding inline math); stripped is lines[i] with the "OPT_SPACE\" removed.
+//   - nil, 0, "" : not a block math element; the caller falls to paragraph parsing
+//     (where a bare "$$…$$" may still become inline math, or stay literal text).
+func (p *parser) tryBlockMath(lines []string, i int) (el *Element, consumed int, stripped string) {
+	rest := strings.Join(lines[i:], "\n")
+	m := reBlockMath.FindStringSubmatchIndex(rest)
+	if m == nil {
+		return nil, 0, ""
 	}
-	if i+1 < len(lines) && strings.TrimSpace(lines[i+1]) != "" {
-		return nil, 0
+	backslash := m[2] != m[3] // group 1 ("\\?") matched a backslash
+	content := rest[m[4]:m[5]]
+	// afterClose is everything past the closing "$$"; the math's own line ends
+	// cleanly when only horizontal whitespace precedes a newline or the end of input.
+	afterClose := rest[m[1]:]
+	trimmed := strings.TrimLeft(afterClose, " \t")
+	cleanEnd := trimmed == "" || trimmed[0] == '\n'
+	if backslash {
+		// A leading backslash is never block math. When the line ends cleanly kramdown
+		// consumes the "OPT_SPACE\" and falls through to paragraph parsing; otherwise
+		// the backslash is left in place (the whole line becomes literal paragraph text).
+		if !cleanEnd {
+			return nil, 0, ""
+		}
+		return nil, 0, reBlockMathLead.ReplaceAllString(lines[i], "")
 	}
-	el := newEl(ElMath)
-	el.Value = strings.TrimSpace(m[2])
-	return el, 1
+	if !cleanEnd {
+		return nil, 0, "" // text follows the closing "$$": not a block boundary.
+	}
+	// before_block_boundary?: after the math line's newline, the next line must be a
+	// blank line, an EOB "^" marker, a block IAL, or the end of input.
+	if trimmed != "" { // trimmed starts with '\n'; inspect the following line.
+		next := trimmed[1:]
+		if line, _, _ := strings.Cut(next, "\n"); line != "" &&
+			strings.TrimSpace(line) != "" && strings.TrimRight(line, " \t") != "^" {
+			if _, ok := matchBlockIAL(line); !ok {
+				return nil, 0, ""
+			}
+		}
+	}
+	el = newEl(ElMath)
+	el.Value = strings.TrimSpace(content)
+	consumed = strings.Count(rest[:m[1]], "\n") + 1
+	return el, consumed, ""
 }
+
+// reBlockMathLead strips the "OPT_SPACE\" (0-3 leading spaces then one backslash)
+// that kramdown's parse_block_math consumes from a leading-backslash "\$$…$$" line
+// before reparsing the remainder as a paragraph.
+var reBlockMathLead = regexp.MustCompile(`^ {0,3}\\`)
 
 // parseOneBlock dispatches on lines[i] to the correct block parser and returns the
 // number of input lines consumed (always >= 1). atBoundary reports whether the
@@ -268,9 +313,15 @@ func (p *parser) parseOneBlock(lines []string, i int, parent *Element, atBoundar
 	if reULItem.MatchString(line) || reOLItem.MatchString(line) {
 		return p.parseList(lines, i, parent)
 	}
-	if math, n := p.tryBlockMath(lines, i); math != nil {
+	if math, n, stripped := p.tryBlockMath(lines, i); math != nil {
 		parent.addChild(math)
 		return n
+	} else if stripped != "" {
+		// A leading-backslash "\$$…$$" line: kramdown drops the backslash and reparses
+		// the remainder (and any lines it continues onto) as a paragraph.
+		mod := append([]string(nil), lines...)
+		mod[i] = stripped
+		return p.parseParagraph(mod, i, parent)
 	}
 	if atBoundary {
 		if tbl, n := p.tryTable(lines, i); tbl != nil {

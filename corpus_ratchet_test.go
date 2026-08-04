@@ -115,6 +115,13 @@ func applyCorpusOptions(o Options, text string) Options {
 			o.FootnoteBacklinkInline = val == "true"
 		case "footnote_link_text":
 			o.FootnoteLinkText = val
+		case "math_engine":
+			// YAML "~" (or an empty value) is nil: disable the math engine.
+			if val == "~" || val == "" {
+				o.MathEngine = ""
+			} else {
+				o.MathEngine = strings.TrimPrefix(val, ":")
+			}
 		case "syntax_highlighter":
 			o.SyntaxHighlighter = normalizeHighlighter(val)
 		case "syntax_highlighter_opts":

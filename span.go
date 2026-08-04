@@ -275,6 +275,21 @@ func (sp *spanParser) parseInto(stop *emphStop) bool {
 			}
 			lit.WriteByte(c)
 			sp.pos++
+		case '$':
+			// Inline math: kramdown's INLINE_MATH_START = /\$\$(.*?)\$\$/m. The "$$"-
+			// delimited LaTeX (matched non-greedily, across newlines) becomes a span
+			// :math element whose value is the stripped source; a following span IAL
+			// ("{:…}") is attached like any other inline construct. A lone "$" or an
+			// unterminated "$$" stays literal.
+			if m := reInlineMath.FindStringSubmatch(sp.src[sp.pos:]); m != nil {
+				flush()
+				el := newEl(ElMath)
+				el.Value = strings.TrimSpace(m[1])
+				sp.push(el, len(m[0]))
+				continue
+			}
+			lit.WriteByte('$')
+			sp.pos++
 		case '\n':
 			// Soft line break, possibly hard if preceded by two spaces (handled at
 			// block level via trailing markers); here keep newline literal.
@@ -292,6 +307,11 @@ func (sp *spanParser) parseInto(stop *emphStop) bool {
 // reSpanIAL matches a span-level IAL ("{:...}") immediately following an inline
 // element, capturing its attribute body.
 var reSpanIAL = regexp.MustCompile(`^\{:([^}]*)\}`)
+
+// reInlineMath matches kramdown's INLINE_MATH_START = /\$\$(.*?)\$\$/m at the
+// current span position: the "$$"-delimited LaTeX, captured non-greedily and
+// spanning newlines ((?s)), so "$$1\n+ 1$$" is one math span.
+var reInlineMath = regexp.MustCompile(`(?s)^\$\$(.*?)\$\$`)
 
 // reSpanExtStart matches an inline extension start tag "{::name attrs /?}".
 var reSpanExtStart = regexp.MustCompile(`^\{::(\w+)(?:[ \t]((?:\\\}|[^}])*?))?(/)?\}`)
