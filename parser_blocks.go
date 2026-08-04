@@ -144,224 +144,368 @@ func unquoteTitle(t string) string {
 	return t
 }
 
-// parseList parses an ordered or unordered list starting at lines[start].
+// parseList parses an ordered or unordered list starting at lines[start],
+// faithfully following kramdown's parser/kramdown/list.rb. Each item's content is
+// accumulated into one or more "value segments" (kramdown's item.value array): a
+// new segment begins at the line where a nested list first appears, and every
+// segment is parsed as an independent block stream. Content lines carry an
+// indentation that is stripped before re-parsing; a lazily-continued nested-list
+// marker is re-indented so the recursive parse recognises it.
 func (p *parser) parseList(lines []string, start int, parent *Element) int {
-	first := lines[start]
-	ordered := reOLItem.MatchString(first)
+	ordered := reOLItem.MatchString(lines[start])
 	listType := ElUL
 	if ordered {
 		listType = ElOL
 	}
 	list := newEl(listType)
-	i := start
-	loose := false
+
 	type itemData struct {
-		lines         []string
-		looseItem     bool // blank separator seen inside the item
-		trailingBlank bool // a blank line separates this item from the next sibling
+		segments []string // concatenated value segments
+		ial      string   // a leading "{:…}" IAL applied to the <li>
+		hasIAL   bool
 	}
 	var items []itemData
+	cur := -1
+
+	indentation := 0
+	nestedListFound := false
+	lastIsBlank := false
 	eobFound := false
+
+	i := start
 	for i < len(lines) {
-		// A standalone EOB "^" marker terminates the list (kramdown's EOB_MARKER); the
-		// marker itself is left for the surrounding block loop to consume (it renders
-		// nothing), so a following list starts fresh.
-		if strings.TrimRight(lines[i], " \t") == "^" {
-			eobFound = true
+		line := lines[i]
+		// A horizontal rule after a blank line terminates the list.
+		if lastIsBlank && reHR.MatchString(line) {
 			break
 		}
-		// Skip blank lines between items (they only affect looseness, already
-		// recorded on the preceding item) so a blank-separated sibling continues
-		// the same list rather than starting a new one.
-		if strings.TrimSpace(lines[i]) == "" {
-			j := i
-			for j < len(lines) && strings.TrimSpace(lines[j]) == "" {
-				j++
+		// An end-of-block marker terminates the list and is itself consumed.
+		if strings.TrimRight(line, " \t") == "^" {
+			eobFound = true
+			i++
+			break
+		}
+		// A marker whose indent is below the item-content indent starts a sibling
+		// item (the first item accepts any 0-3 space indent). reULItem/reOLItem cap
+		// their leading-space capture at three, matching kramdown's fetch_pattern.
+		if g := listMarker(line, ordered); g != nil && (len(items) == 0 || len(g[1]) <= siblingMax(indentation)) {
+			content := g[3] + g[4]
+			firstContent, ind := parseFirstListLine(markerLength(g, ordered), content)
+			var it itemData
+			if body, rest, ok := stripLeadingItemIAL(firstContent); ok {
+				it.ial, it.hasIAL, firstContent = body, true, rest
 			}
-			nextIsItem := j < len(lines) && ((ordered && reOLItem.MatchString(lines[j])) ||
-				(!ordered && reULItem.MatchString(lines[j])))
-			// A horizontal rule (kramdown breaks on last_is_blank && HR_START, even
-			// though "* * *" also matches a UL marker) or a lone EOB "^" ends the list,
-			// as does any non-continuation line. In every case the blank line kramdown
-			// consumed belongs to the (now last) item's value, so it carries a trailing
-			// blank that its looseness decision reads.
-			if j >= len(lines) || reHR.MatchString(lines[j]) ||
-				strings.TrimRight(lines[j], " \t") == "^" || !nextIsItem {
-				if j < len(lines) && strings.TrimRight(lines[j], " \t") == "^" {
-					// kramdown consumes the blank into the item then breaks on EOB, and
-					// does NOT re-emit it after the list — skip past it to the marker.
-					eobFound = true
-					i = j
-				}
-				if len(items) > 0 {
-					items[len(items)-1].trailingBlank = true
-				}
-				break
+			if firstContent == "" {
+				it.segments = []string{""}
+			} else {
+				it.segments = []string{firstContent + "\n"}
 			}
-			if len(items) > 0 {
-				items[len(items)-1].looseItem = true
-				items[len(items)-1].trailingBlank = true
-				loose = true
-			}
-			i = j
+			items = append(items, it)
+			cur = len(items) - 1
+			indentation = ind
+			nestedListFound = listStartMatch(firstContent)
+			lastIsBlank = false
+			i++
 			continue
 		}
-		line := lines[i]
-		var m []string
-		if ordered {
-			m = reOLItem.FindStringSubmatch(line)
-		} else {
-			m = reULItem.FindStringSubmatch(line)
+		// A sufficiently-indented content line, or (when the previous line was not
+		// blank) a lazily-continued line, extends the current item.
+		if matchesContentRe(line, indentation) || (!lastIsBlank && matchesLazyRe(line, indentation)) {
+			result, indentFound := stripListIndent(line, indentation)
+			switch {
+			case !nestedListFound && indentFound && listStartMatch(result):
+				// The first nested list begins: start a new value segment.
+				items[cur].segments = append(items[cur].segments, "")
+				nestedListFound = true
+			case nestedListFound && !indentFound && listStartMatch(result):
+				// A lazily-continued nested-list marker: re-indent it so the recursive
+				// parse of this segment recognises the marker at the nested level.
+				result = strings.Repeat(" ", indentation+4) + result
+			}
+			n := len(items[cur].segments) - 1
+			items[cur].segments[n] += result + "\n"
+			lastIsBlank = false
+			i++
+			continue
 		}
-		if m == nil {
-			break
+		// A blank line: kept in the item's value (its looseness decision reads it) and
+		// treated as the start of a nested list for subsequent lines.
+		if strings.TrimSpace(line) == "" {
+			nestedListFound = true
+			lastIsBlank = true
+			n := len(items[cur].segments) - 1
+			items[cur].segments[n] += "\n"
+			i++
+			continue
 		}
-		marker := m[2]
-		gap := m[3]
-		content := m[4]
-		// kramdown caps the content indent at marker+1 space when the gap is large
-		// (a "big space" starts a code block); for the common case the indent is
-		// marker width plus the following spaces.
-		indent := len(m[1]) + len(marker) + len(gap)
-		it := itemData{lines: []string{content}}
-		i++
-		freshPara := false // the next indented line starts a blank-separated paragraph
-		// Gather continuation / nested / paragraph lines for this item.
-		for i < len(lines) {
-			l := lines[i]
-			if strings.TrimRight(l, " \t") == "^" {
-				// EOB marker: end the item (and the list); the outer loop stops too.
-				break
-			}
-			if strings.TrimSpace(l) == "" {
-				// Look past the blank run.
-				j := i
-				for j < len(lines) && strings.TrimSpace(lines[j]) == "" {
-					j++
-				}
-				if j >= len(lines) {
-					break
-				}
-				nxt := lines[j]
-				indented := strings.HasPrefix(nxt, strings.Repeat(" ", indent))
-				nextIsItem := (ordered && reOLItem.MatchString(nxt)) || (!ordered && reULItem.MatchString(nxt))
-				if indented {
-					// Blank then indented content: a paragraph continuation (loose item).
-					it.looseItem = true
-					loose = true
-					it.lines = append(it.lines, "")
-					i++
-					freshPara = true
-					continue
-				}
-				if nextIsItem {
-					// Blank then a sibling marker: the list stays but this item is loose
-					// and carries a trailing blank child (kramdown keeps the blank line in
-					// the item's value, which drives its looseness decision).
-					it.looseItem = true
-					it.trailingBlank = true
-					loose = true
-				}
-				break
-			}
-			// A sibling marker at this level ends the item.
-			if (ordered && reOLItem.MatchString(l)) || (!ordered && reULItem.MatchString(l)) {
-				lm := reULItem.FindStringSubmatch(l)
-				if lm == nil {
-					lm = reOLItem.FindStringSubmatch(l)
-				}
-				if len(lm[1]) < indent {
-					break
-				}
-			}
-			if strings.HasPrefix(l, strings.Repeat(" ", indent)) {
-				if freshPara {
-					// A blank-separated paragraph: kramdown strips its full leading
-					// whitespace, not just the item indent.
-					it.lines = append(it.lines, strings.TrimLeft(l, " "))
-				} else {
-					it.lines = append(it.lines, l[indent:])
-				}
-				i++
-				continue
-			}
-			freshPara = false
-			// Lazy continuation: an unindented, non-block, non-marker line.
-			if !p.startsNewBlock(lines, i) && !reULItem.MatchString(l) && !reOLItem.MatchString(l) {
-				it.lines = append(it.lines, strings.TrimRight(l, " \t"))
-				i++
-				continue
-			}
-			break
-		}
-		// Trim trailing blank lines in the item; a trailing blank child is (re)added
-		// below once the final trailingBlank state is known (a later loop iteration can
-		// mark this item once it sees the blank that separates it from what follows).
-		for len(it.lines) > 0 && strings.TrimSpace(it.lines[len(it.lines)-1]) == "" {
-			it.lines = it.lines[:len(it.lines)-1]
-		}
-		items = append(items, it)
+		break
 	}
-	savedInItem := p.inItem
-	p.inItem = true
-	for _, it := range items {
+
+	for idx := range items {
+		it := items[idx]
 		li := newEl(ElLI)
-		lns := it.lines
-		// A leading "{:…}" IAL on the item's first line applies to the <li>.
-		if len(lns) > 0 {
-			if body, rest, ok := stripLeadingItemIAL(lns[0]); ok {
-				applyIALToElement(li, body, p.aldDefs)
-				lns = append([]string{rest}, lns[1:]...)
-			}
+		if it.hasIAL {
+			applyIALToElement(li, it.ial, p.aldDefs)
 		}
-		// A blank line separated this item from what follows: kramdown keeps that
-		// blank in the item's value as a trailing :blank child, which the looseness
-		// rule reads.
-		if it.trailingBlank {
-			lns = append(lns, "")
+		for _, seg := range it.segments {
+			p.parseBlocks(splitSegment(seg), li)
 		}
-		p.parseBlocks(lns, li)
 		list.addChild(li)
 	}
-	p.inItem = savedInItem
-	finalizeListItems(list, eobFound)
-	list.Options["tight"] = !loose
 	parent.addChild(list)
+	// kramdown re-emits the last item's trailing blank as a separator after the
+	// list, unless an EOB marker closed it.
+	if finalizeListItems(list, eobFound) && !eobFound {
+		parent.addChild(newEl(ElBlank))
+	}
 	return i - start
+}
+
+// splitSegment splits a value-segment string into re-parseable lines. Each stored
+// line ended in a newline, so a single trailing empty element is dropped.
+func splitSegment(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, "\n")
+	if n := len(parts); n > 0 && parts[n-1] == "" {
+		parts = parts[:n-1]
+	}
+	return parts
+}
+
+// listMarker returns the list-marker submatch for line at the current list type,
+// or nil if the line does not begin with a marker of that type.
+func listMarker(line string, ordered bool) []string {
+	if ordered {
+		return reOLItem.FindStringSubmatch(line)
+	}
+	return reULItem.FindStringSubmatch(line)
+}
+
+// markerLength returns the length of the marker plus its leading spaces (kramdown's
+// @src[1].length): the leading spaces and bullet for a UL, or the digits and dot
+// for an OL.
+func markerLength(g []string, ordered bool) int {
+	if ordered {
+		return len(g[1]) + len(g[2]) + 1
+	}
+	return len(g[1]) + len(g[2])
+}
+
+// siblingMax is the greatest leading-space count a marker may have and still start
+// a sibling item at the given content indentation (kramdown's fetch_pattern range).
+func siblingMax(indentation int) int {
+	m := indentation - 1
+	if m > 3 {
+		m = 3
+	}
+	if m < 0 {
+		m = 0
+	}
+	return m
+}
+
+// listStartMatch reports whether s begins with a list marker (kramdown's
+// LIST_START), used to detect a nested list.
+func listStartMatch(s string) bool {
+	return reULItem.MatchString(s) || reOLItem.MatchString(s)
+}
+
+// parseFirstListLine reproduces kramdown's parse_first_list_line: it computes the
+// content indentation (marker width plus the leading whitespace after it, with tabs
+// expanded to the next 4-column stop) and returns the left-stripped first-line
+// content. An item whose first line is only an IAL (or empty) uses a fixed indent
+// of four.
+func parseFirstListLine(markerLen int, content string) (string, int) {
+	indentation := markerLen
+	if isItemIALCheck(content) {
+		indentation = 4
+	} else {
+		content = expandLeadingTabs(content, markerLen)
+		sp := 0
+		for sp < len(content) && content[sp] == ' ' {
+			sp++
+		}
+		indentation += sp
+	}
+	return strings.TrimLeft(content, " \t"), indentation
+}
+
+// isItemIALCheck reports whether content is only a leading item IAL followed by
+// whitespace (kramdown's LIST_ITEM_IAL_CHECK).
+func isItemIALCheck(content string) bool {
+	rest := content
+	if _, r, ok := stripLeadingItemIAL(content); ok {
+		rest = r
+	}
+	return strings.TrimSpace(rest) == ""
+}
+
+// expandLeadingTabs replaces a leading run of "spaces then tabs" with spaces,
+// aligning each tab to the next 4-column stop relative to base (kramdown's tab
+// expansion in parse_first_list_line).
+func expandLeadingTabs(content string, base int) string {
+	for {
+		sp := 0
+		for sp < len(content) && content[sp] == ' ' {
+			sp++
+		}
+		if sp >= len(content) || content[sp] != '\t' {
+			break
+		}
+		tabs := 0
+		for sp+tabs < len(content) && content[sp+tabs] == '\t' {
+			tabs++
+		}
+		temp := sp + base
+		add := 4 - (temp % 4) + (tabs-1)*4
+		content = content[:sp] + strings.Repeat(" ", add) + content[sp+tabs:]
+	}
+	return content
+}
+
+// matchesContentRe reports whether line is indented enough to belong to an item at
+// the given content indentation (kramdown's content_re), counting a leading tab or
+// four spaces as one indent unit.
+func matchesContentRe(line string, indentation int) bool {
+	q, r := indentation/4, indentation%4
+	if p := consumeIndentUnits(line, q); p >= 0 {
+		if p+r <= len(line) && allSpaces(line[p:p+r]) && hasNonSpace(line[p+r:]) {
+			return true
+		}
+	}
+	if p := consumeIndentUnits(line, q+1); p >= 0 && hasNonSpace(line[p:]) {
+		return true
+	}
+	return false
+}
+
+// consumeIndentUnits consumes k indent units (each a tab or four spaces) from the
+// start of line, returning the byte offset past them or -1 if fewer are present.
+func consumeIndentUnits(line string, k int) int {
+	pos := 0
+	for u := 0; u < k; u++ {
+		switch {
+		case pos < len(line) && line[pos] == '\t':
+			pos++
+		case pos+4 <= len(line) && line[pos:pos+4] == "    ":
+			pos += 4
+		default:
+			return -1
+		}
+	}
+	return pos
+}
+
+// allSpaces reports whether s consists entirely of ASCII spaces.
+func allSpaces(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] != ' ' {
+			return false
+		}
+	}
+	return true
+}
+
+// hasNonSpace reports whether s contains a non-whitespace character.
+func hasNonSpace(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] != ' ' && s[i] != '\t' {
+			return true
+		}
+	}
+	return false
+}
+
+// matchesLazyRe reports whether line may lazily continue an item (kramdown's
+// lazy_re): a non-blank line that does not begin (within the item indent, capped at
+// three spaces) with a block IAL or an HTML lazy-boundary tag.
+func matchesLazyRe(line string, indentation int) bool {
+	if strings.TrimSpace(line) == "" {
+		return false
+	}
+	max := indentation
+	if max > 3 {
+		max = 3
+	}
+	ls := 0
+	for ls < len(line) && line[ls] == ' ' {
+		ls++
+	}
+	if ls <= max {
+		rest := line[ls:]
+		if _, ok := matchBlockIAL(rest); ok {
+			return false
+		}
+		if isHTMLBlockStart(rest) {
+			return false
+		}
+	}
+	return true
+}
+
+// stripListIndent removes the item's content indentation from line (kramdown's
+// indent_re), first expanding a leading run of tabs to four spaces each. It reports
+// whether the full indentation was present.
+func stripListIndent(line string, indentation int) (string, bool) {
+	tabs := 0
+	for tabs < len(line) && line[tabs] == '\t' {
+		tabs++
+	}
+	if tabs > 0 {
+		line = strings.Repeat(" ", tabs*4) + line[tabs:]
+	}
+	sp := 0
+	for sp < len(line) && line[sp] == ' ' {
+		sp++
+	}
+	if sp >= indentation {
+		return line[indentation:], true
+	}
+	return line, false
 }
 
 // finalizeListItems reproduces kramdown's per-item looseness decision
 // (parser/kramdown/list.rb): the first paragraph of an item is rendered
 // "transparent" (inline, without a <p> wrapper) unless the item is loose. It also
 // pops a trailing :blank child off each item. eobFound reports whether the list was
-// terminated by an EOB ("^") marker, which suppresses the last-item exemption.
-func finalizeListItems(list *Element, eobFound bool) {
+// terminated by an EOB ("^") marker, which suppresses the last-item exemption. It
+// returns whether the last item carried a trailing blank (kramdown's re-emitted
+// separator after the list).
+func finalizeListItems(list *Element, eobFound bool) bool {
 	items := list.Children
+	lastHadBlank := false
 	for idx, li := range items {
-		ch := li.Children
-		if len(ch) == 0 {
-			continue
-		}
 		isLast := idx == len(items)-1
-		// Condition A: first child is a paragraph and it is not immediately followed
-		// by a blank separator — except the very last item may keep a single trailing
-		// blank (unless an EOB marker closed the list).
-		aCond := ch[0].Type == ElP &&
-			(len(ch) < 2 || ch[1].Type != ElBlank ||
-				(isLast && len(ch) == 2 && !eobFound))
-		// Condition B: a non-last item always qualifies; a lone item qualifies; the
-		// last item qualifies only if some earlier item is not a non-transparent
-		// paragraph (i.e. the list is not uniformly loose).
-		bCond := !isLast || len(items) == 1 || anyEarlierQualifies(items[:idx])
-		if aCond && bCond {
-			li.Options["first_transparent"] = true
+		ch := li.Children
+		if len(ch) > 0 {
+			// Condition A: first child is a paragraph and it is not immediately
+			// followed by a blank separator — except the very last item may keep a
+			// single trailing blank (unless an EOB marker closed the list).
+			aCond := ch[0].Type == ElP &&
+				(len(ch) < 2 || ch[1].Type != ElBlank ||
+					(isLast && len(ch) == 2 && !eobFound))
+			// Condition B: a non-last item always qualifies; a lone item qualifies; the
+			// last item qualifies only if some earlier item is not a non-transparent
+			// paragraph (i.e. the list is not uniformly loose).
+			bCond := !isLast || len(items) == 1 || anyEarlierQualifies(items[:idx])
+			if aCond && bCond {
+				li.Options["first_transparent"] = true
+			}
 		}
-		// Pop a trailing blank child (it becomes a separator after the list, which the
-		// surrounding block stream already emits).
+		// Pop a trailing blank child; on the last item it becomes the separator the
+		// caller re-emits after the list.
+		popped := false
 		if n := len(li.Children); n > 0 && li.Children[n-1].Type == ElBlank {
 			li.Children = li.Children[:n-1]
+			popped = true
+		}
+		if isLast {
+			lastHadBlank = popped
 		}
 	}
+	return lastHadBlank
 }
 
 // anyEarlierQualifies is kramdown's list.children[0..-2].any? predicate: an item

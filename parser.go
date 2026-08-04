@@ -20,10 +20,6 @@ type parser struct {
 	aldDefs  map[string]string // ALD id -> raw attribute string
 	footDefs map[string]*Element
 	warnings []string
-	// inItem is set while parsing the de-indented content of a list/definition
-	// item, where (unlike at the top level) a list marker on a continuation line
-	// begins a nested list rather than lazily continuing a paragraph.
-	inItem bool
 }
 
 // linkDef is a reference-style link/image definition: [id]: url "title".
@@ -330,19 +326,11 @@ func (p *parser) makeSetextHeader(buf []string, underline string, parent *Elemen
 // paragraph (or lazy continuation) without an intervening blank line. kramdown is
 // blank-line delimited: a header, list, fence, quote or table on the next line is
 // absorbed into the paragraph, NOT split out — only a block-level HTML element
-// interrupts. Inside a list/definition item, a list marker additionally starts a
-// nested list.
+// interrupts. A list item's content is pre-segmented by parseList (each nested list
+// begins its own value segment), so a list marker never needs to interrupt a
+// paragraph here.
 func (p *parser) startsNewBlock(lines []string, i int) bool {
-	line := lines[i]
-	switch {
-	case isHTMLBlockStart(line):
-		return true
-	case p.inItem && (reULItem.MatchString(line) || reOLItem.MatchString(line)):
-		// Inside a list item, a marker line starts a nested list (top-level
-		// paragraphs, by contrast, swallow a marker as lazy continuation).
-		return true
-	}
-	return false
+	return isHTMLBlockStart(lines[i])
 }
 
 // parseComment handles the {::comment}…{:/comment} extension, emitting an
