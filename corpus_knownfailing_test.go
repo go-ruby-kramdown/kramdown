@@ -40,11 +40,6 @@ var knownFailing = map[string]bool{
 	// (options3, which needed the rouge token markup, now passes via the go-ruby-rouge wiring.)
 	"block/12_extension/options.text": true,
 
-	// block/13_definition_list (3)
-	"block/13_definition_list/auto_ids.text":    true,
-	"block/13_definition_list/item_ial.text":    true,
-	"block/13_definition_list/with_blocks.text": true,
-
 	// block/14_table (2)
 	// errors: a table directly after a harvested link-reference definition (no
 	// blank line) requires kramdown's after_block_boundary semantics, which this

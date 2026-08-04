@@ -379,6 +379,34 @@ func anyEarlierQualifies(earlier []*Element) bool {
 	return false
 }
 
+// defMarkerIALOnly reports whether the text following a definition marker's
+// leading whitespace is empty or a single "{:…}" IAL with nothing else, in which
+// case kramdown fixes the definition's continuation indentation at four columns.
+func defMarkerIALOnly(after string) bool {
+	if strings.TrimSpace(after) == "" {
+		return true
+	}
+	if _, rest, ok := stripLeadingItemIAL(after); ok {
+		return strings.TrimSpace(rest) == ""
+	}
+	return false
+}
+
+// defGroupFollows reports whether lines[start] begins a fresh term/definition
+// group: one or more consecutive term lines (each a plain line, not itself a
+// marker, blank or the start of another block) immediately followed by a
+// ": definition" marker.
+func (p *parser) defGroupFollows(lines []string, start int) bool {
+	k := start
+	for k < len(lines) && strings.TrimSpace(lines[k]) != "" && !reDefMarker.MatchString(lines[k]) {
+		if p.startsNewBlock(lines, k) || reULItem.MatchString(lines[k]) || reOLItem.MatchString(lines[k]) {
+			return false
+		}
+		k++
+	}
+	return k > start && k < len(lines) && reDefMarker.MatchString(lines[k])
+}
+
 // tryDefinitionList recognises a definition list: a term line (or several)
 // followed by a ": definition" line. Returns nil if lines[start] is not one.
 func (p *parser) tryDefinitionList(lines []string, start int) (*Element, int) {
@@ -438,10 +466,9 @@ func (p *parser) tryDefinitionList(lines []string, start int) (*Element, int) {
 					// The blank separates a definition from its own term, so this
 					// definition is loose (its content is wrapped in <p>).
 					markerAfterBlank = true
-				} else if j+1 < len(lines) && reDefMarker.MatchString(lines[j+1]) &&
-					!reDefMarker.MatchString(lines[j]) && strings.TrimSpace(lines[j]) != "" {
-					// The blank precedes a fresh term whose marker follows immediately:
-					// a new, tight term/definition group.
+				} else if p.defGroupFollows(lines, j) {
+					// The blank precedes one or more fresh term lines whose ": def" marker
+					// follows immediately: a new, tight term/definition group.
 					cont = true
 				}
 			}
@@ -456,6 +483,12 @@ func (p *parser) tryDefinitionList(lines []string, start int) (*Element, int) {
 		}
 		if dm := reDefMarker.FindStringSubmatch(line); dm != nil {
 			indent := len(dm[1]) + 1 + len(dm[3])
+			if defMarkerIALOnly(dm[4]) {
+				// A definition marker whose content is empty or a lone "{:…}" IAL fixes
+				// the continuation indentation at four columns, matching kramdown's
+				// parse_first_list_line (LIST_ITEM_IAL_CHECK sets indentation = 4).
+				indent = 4
+			}
 			var body []string
 			body = append(body, dm[4])
 			i++
@@ -479,15 +512,18 @@ func (p *parser) tryDefinitionList(lines []string, start int) (*Element, int) {
 					}
 					break
 				}
-				if reDefMarker.MatchString(l) {
-					break
-				}
 				if strings.HasPrefix(l, strings.Repeat(" ", indent)) {
+					// An indented line belongs to this definition, even one that itself
+					// looks like a ": …" marker (a nested definition list): the indent is
+					// stripped and the remainder parsed recursively.
 					body = append(body, l[indent:])
 					i++
 					continue
 				}
-				if !p.startsNewBlock(lines, i) && !reDefMarker.MatchString(l) {
+				if reDefMarker.MatchString(l) {
+					break // an un-indented marker starts a sibling definition
+				}
+				if !p.startsNewBlock(lines, i) {
 					body = append(body, strings.TrimRight(l, " \t"))
 					i++
 					continue
@@ -504,6 +540,13 @@ func (p *parser) tryDefinitionList(lines []string, start int) (*Element, int) {
 					applyIALToElement(dd, ialBody, p.aldDefs)
 					body[0] = rest
 				}
+			}
+			// When the marker's own line carries no text (it was empty or only an IAL),
+			// kramdown consumes that line's newline together with the IAL, so the
+			// definition body starts at the following (indented) line rather than a
+			// spurious leading blank.
+			if len(body) > 0 && strings.TrimSpace(body[0]) == "" {
+				body = body[1:]
 			}
 			p.parseBlocks(body, dd)
 			if pendingLoose {
