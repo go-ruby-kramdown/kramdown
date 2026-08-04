@@ -83,14 +83,21 @@ func (c *htmlConverter) rougeHighlight(text, lang string, guess bool) (inner, la
 		if lx = rouge.FindFancy(lang); lx == nil {
 			return "", "", false
 		}
-		langClass = "language-" + lang + " "
+		// The wrapper's language-<x> class is the resolved lexer's canonical tag,
+		// not the raw fenced spec (kramdown builds it from lexer.tag): an alias or a
+		// "tag?opts" fancy spec — e.g. php?start_inline=1 — collapses to its tag
+		// (language-php).
+		langClass = "language-" + lx.Tag() + " "
 	} else if guess {
+		// A guessed block carries no language-<x> class (kramdown leaves the code
+		// element's language nil), so the wrapper is just highlighter-rouge.
 		lx = rouge.Guess(text)
 	} else {
 		return "", "", false
 	}
-	// lx is always a registered lexer (FindFancy/Guess never return an unregistered
-	// one) and "html" is a registered formatter, so Highlight cannot error here.
-	inner, _ = rouge.Highlight(text, lx.Tag(), "html")
+	// Format the resolved lexer instance directly (rather than re-resolving by tag)
+	// so a fancy-spec option such as start_inline is honoured. FindFancy/Guess
+	// always return a registered lexer, so this cannot fail.
+	inner = rouge.HTMLFormatter{}.Format(lx.Lex(text))
 	return inner, langClass, true
 }
