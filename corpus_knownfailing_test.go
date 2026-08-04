@@ -65,11 +65,6 @@ var knownFailing = map[string]bool{
 	"span/01_link/links_with_angle_brackets.text": true,
 	"span/01_link/reference.text":                 true,
 
-	// span/02_emphasis (3)
-	"span/02_emphasis/empty.text":   true,
-	"span/02_emphasis/errors.text":  true,
-	"span/02_emphasis/nesting.text": true,
-
 	// span/04_footnote (3)
 	"span/04_footnote/backlink_inline.text": true,
 	"span/04_footnote/definitions.text":     true,

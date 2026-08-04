@@ -17,20 +17,31 @@ type spanParser struct {
 	src string
 	pos int
 	out []*Element
+	// dst points at the slice the current parse appends span elements to. It is
+	// &out at the top level and &el.Children while recursing into an emphasis body.
+	dst *[]*Element
+	// stack holds the element types of the enclosing emphasis containers (the
+	// current tree plus its ancestors), mirroring kramdown's @tree/@stack. It lets
+	// parse_emphasis refuse to nest an :em inside an :em (or :strong inside :strong).
+	stack []ElementType
 }
 
 // parseSpans converts a block's raw text into span elements.
 func (p *parser) parseSpans(raw string) []*Element {
 	sp := &spanParser{p: p, src: raw}
-	sp.run()
+	sp.dst = &sp.out
+	sp.parseInto(nil)
 	els := sp.out
 	els = applyAbbreviations(els, p.abbrevs)
 	return els
 }
 
-// run is the main span-parsing loop: it scans for the next active span construct,
-// flushing literal runs as ElText in between.
-func (sp *spanParser) run() {
+// parseInto is the main span-parsing loop: it scans for the next active span
+// construct, flushing literal runs as ElText in between, and appends the results
+// to *sp.dst. When stop is non-nil it mirrors kramdown's parse_spans stop_re: at
+// each candidate position it checks whether the closing marker is accepted and, if
+// so, flushes pending text and returns true with sp.pos left on the closer.
+func (sp *spanParser) parseInto(stop *emphStop) bool {
 	var lit strings.Builder
 	flush := func() {
 		if lit.Len() > 0 {
@@ -39,6 +50,14 @@ func (sp *spanParser) run() {
 		}
 	}
 	for sp.pos < len(sp.src) {
+		// kramdown checks the stop regexp before the span parsers: an accepted closer
+		// wins over opening a new span at the same position.
+		if stop != nil && sp.src[sp.pos] == stop.delim[0] {
+			if sp.acceptClose(stop, lit.Len() > 0 || len(*sp.dst) > 0) {
+				flush()
+				return true
+			}
+		}
 		c := sp.src[sp.pos]
 		switch c {
 		case '\\':
@@ -53,7 +72,7 @@ func (sp *spanParser) run() {
 					// (the trailing spaces, if any, form their own break in emitText).
 					if strings.HasPrefix(rest, "\n") && strings.TrimSpace(rest) != "" {
 						flush()
-						sp.out = append(sp.out, newEl(ElBr))
+						*sp.dst = append(*sp.dst, newEl(ElBr))
 						// Skip past the "\\" and the newline it consumes; the ElBr renders
 						// its own trailing newline so the source "\n" must not be re-emitted.
 						sp.pos += 3
@@ -78,17 +97,22 @@ func (sp *spanParser) run() {
 			lit.WriteByte('`')
 			sp.pos++
 		case '*', '_':
-			if el, n := sp.tryEmphasis(); el != nil {
+			// tryEmphasis parses the whole construct (advancing sp.pos past the closer)
+			// and returns the element, or nil plus the literal marker text to emit when
+			// no emphasis can be formed.
+			if el, litMarker := sp.tryEmphasis(); el != nil {
 				flush()
-				sp.push(el, n)
+				*sp.dst = append(*sp.dst, el)
+				sp.consumeSpanIALs(el)
 				continue
+			} else {
+				lit.WriteString(litMarker)
+				sp.pos += len(litMarker)
 			}
-			lit.WriteByte(c)
-			sp.pos++
 		case '[':
 			if el, n := sp.tryFootnoteRef(); el != nil {
 				flush()
-				sp.out = append(sp.out, el)
+				*sp.dst = append(*sp.dst, el)
 				sp.pos += n
 				continue
 			}
@@ -127,7 +151,7 @@ func (sp *spanParser) run() {
 			if el, n, ok := sp.trySpanExtension(); ok {
 				flush()
 				if el != nil {
-					sp.out = append(sp.out, el)
+					*sp.dst = append(*sp.dst, el)
 				}
 				sp.pos += n
 				continue
@@ -145,6 +169,7 @@ func (sp *spanParser) run() {
 		}
 	}
 	flush()
+	return false
 }
 
 // reSpanIAL matches a span-level IAL ("{:...}") immediately following an inline
@@ -216,10 +241,15 @@ func findSpanStop(s, name string) (idx, length int) {
 // push appends a span element that consumed n source bytes, then consumes and
 // applies a span IAL ("{:...}") if one immediately follows.
 func (sp *spanParser) push(el *Element, n int) {
-	sp.out = append(sp.out, el)
+	*sp.dst = append(*sp.dst, el)
 	sp.pos += n
-	// Consume every span IAL that immediately follows (they accumulate onto the same
-	// element); a "{::…}" extension or "{:/…}" stop tag is not a span IAL.
+	sp.consumeSpanIALs(el)
+}
+
+// consumeSpanIALs consumes every span IAL ("{:...}") that immediately follows the
+// current position, accumulating each onto el; a "{::…}" extension or "{:/…}" stop
+// tag is not a span IAL.
+func (sp *spanParser) consumeSpanIALs(el *Element) {
 	for {
 		m := reSpanIAL.FindStringSubmatch(sp.src[sp.pos:])
 		if m == nil || strings.HasPrefix(m[1], ":") || strings.HasPrefix(m[1], "/") {
@@ -248,29 +278,29 @@ func (sp *spanParser) emitText(s string) {
 			// independent of hard_wrap: drop exactly those two spaces (keeping any
 			// before them) and render <br />.
 			t.Value = before[:len(before)-2]
-			sp.out = append(sp.out, t)
+			*sp.dst = append(*sp.dst, t)
 			// The <br /> renders its own trailing newline, so don't add another.
-			sp.out = append(sp.out, newEl(ElBr))
+			*sp.dst = append(*sp.dst, newEl(ElBr))
 		case sp.p.opts.HardWrap:
 			// hard_wrap turns every newline into a break.
 			t.Value = trimmed
-			sp.out = append(sp.out, t)
-			sp.out = append(sp.out, newEl(ElBr))
+			*sp.dst = append(*sp.dst, t)
+			*sp.dst = append(*sp.dst, newEl(ElBr))
 		default:
 			// A soft break keeps the line verbatim (kramdown preserves a lone trailing
 			// space).
 			t.Value = before
-			sp.out = append(sp.out, t)
+			*sp.dst = append(*sp.dst, t)
 			nl := newEl(ElText)
 			nl.Value = "\n"
-			sp.out = append(sp.out, nl)
+			*sp.dst = append(*sp.dst, nl)
 		}
 		s = s[idx+1:]
 	}
 	if s != "" {
 		t := newEl(ElText)
 		t.Value = s
-		sp.out = append(sp.out, t)
+		*sp.dst = append(*sp.dst, t)
 	}
 }
 
@@ -280,7 +310,7 @@ func (sp *spanParser) emitLiteral(s string) {
 	t := newEl(ElText)
 	t.Value = s
 	t.Options["literal"] = true
-	sp.out = append(sp.out, t)
+	*sp.dst = append(*sp.dst, t)
 }
 
 // isEscapable reports whether c may follow a backslash as a kramdown escape.
@@ -357,95 +387,140 @@ func findCodeClose(s, open string) int {
 	return -1
 }
 
-// tryEmphasis parses *em*, **strong**, _em_, __strong__ and the ***both***
-// nesting, applying kramdown's intraword-underscore and flanking rules for the
-// common cases. Returns the element and consumed length, or nil to fall through.
-func (sp *spanParser) tryEmphasis() (*Element, int) {
-	s := sp.src[sp.pos:]
-	marker := s[0]
-	// Count run length (1 => em, 2 => strong, 3 => both).
-	run := 0
-	for run < len(s) && s[run] == marker {
-		run++
-	}
-	if run > 3 {
-		run = 1 // overly long runs: treat opener as single
-	}
-	// Opening flank: the char after the marker run must not be whitespace.
-	if run >= len(s) || s[run] == ' ' || s[run] == '\t' || s[run] == '\n' {
-		return nil, 0
-	}
-	// Underscore intraword: a "_" with a word char immediately before is literal.
-	if marker == '_' && sp.pos > 0 {
-		prev := sp.src[sp.pos-1]
-		if isWordByte(prev) {
-			return nil, 0
-		}
-	}
-	// Find the matching closing run of the same marker.
-	closeIdx, closeLen := findEmphClose(s, marker, run)
-	if closeIdx < 0 {
-		return nil, 0
-	}
-	inner := s[run:closeIdx]
-	if strings.TrimSpace(inner) == "" {
-		return nil, 0
-	}
-	// Recurse into inner content.
-	innerEls := sp.p.parseSpans(inner)
-	consumed := closeIdx + closeLen
-	switch closeLen {
-	case 3:
-		strong := newEl(ElStrong)
-		em := newEl(ElEm)
-		em.Children = innerEls
-		strong.addChild(em)
-		return strong, consumed
-	case 2:
-		el := newEl(ElStrong)
-		el.Children = innerEls
-		return el, consumed
-	default:
-		el := newEl(ElEm)
-		el.Children = innerEls
-		return el, consumed
-	}
+// emphStop describes the closing marker a nested emphasis parse is looking for,
+// mirroring the stop_re and its acceptance block in kramdown's parse_emphasis.
+type emphStop struct {
+	delim        string // the closing marker run, "*"/"_" (em) or "**"/"__" (strong)
+	isEm         bool   // the enclosing element is an :em (single-char delim)
+	isUnderscore bool   // the marker character is "_" (intraword-sensitive)
 }
 
-// findEmphClose locates the closing marker run for an emphasis opener of the given
-// length, returning the byte offset of the closer and its length (1/2/3). The
-// closer must be non-space-flanked on its left and (for "_") not intraword.
-func findEmphClose(s string, marker byte, openRun int) (int, int) {
-	i := openRun
-	for i < len(s) {
-		if s[i] != marker {
-			i++
-			continue
-		}
-		// count run
-		j := i
-		for j < len(s) && s[j] == marker {
-			j++
-		}
-		runLen := j - i
-		// left flank: preceding char must not be whitespace
-		if i > 0 && (s[i-1] == ' ' || s[i-1] == '\t' || s[i-1] == '\n') {
-			i = j
-			continue
-		}
-		// underscore intraword on the right
-		if marker == '_' && j < len(s) && isWordByte(s[j]) {
-			i = j
-			continue
-		}
-		// Match the requested closing length.
-		want := openRun
-		if runLen >= want {
-			return i, want
-		}
-		i = j
+// reUnderscoreIntraword matches kramdown's guard that keeps an underscore literal
+// when it directly follows a word: /[[:alpha:]]-?[[:alpha:]]*_*\z/ on the text
+// preceding the marker.
+var reUnderscoreIntraword = regexp.MustCompile(`[[:alpha:]]-?[[:alpha:]]*_*\z`)
+
+// tryEmphasis is a faithful port of kramdown's parse_emphasis. It scans an
+// EMPHASIS_START run ("**"/"__" greedily, else "*"/"_"), applies the opening bail
+// conditions, then parses the body with a stop marker (falling back from :strong to
+// :em when the strong run cannot be closed). On success it returns the built
+// element with sp.pos advanced past the closer; otherwise it returns nil and the
+// literal marker text (the EMPHASIS_START match) the caller should emit verbatim.
+func (sp *spanParser) tryEmphasis() (*Element, string) {
+	start := sp.pos
+	s := sp.src[start:]
+	marker := s[0]
+	// EMPHASIS_START = /(?:\*\*?|__?)/ matches at most two marker characters.
+	mlen := 1
+	if len(s) >= 2 && s[1] == marker {
+		mlen = 2
 	}
-	return -1, 0
+	elemType := ElEm
+	if mlen == 2 {
+		elemType = ElStrong
+	}
+	isUnder := marker == '_'
+	litMarker := s[:mlen]
+
+	// Bail conditions (kramdown emits the whole EMPHASIS_START match as text):
+	//  - an underscore directly following a word (intraword),
+	//  - the marker being followed by whitespace (or end of input),
+	//  - the same element type already being open (no :em in :em / :strong in :strong).
+	if isUnder && reUnderscoreIntraword.MatchString(sp.src[:start]) {
+		return nil, litMarker
+	}
+	if start+mlen >= len(sp.src) || isSpaceByte(sp.src[start+mlen]) {
+		return nil, litMarker
+	}
+	if sp.stackHas(elemType) {
+		return nil, litMarker
+	}
+
+	// Primary attempt with the full marker.
+	el, found := sp.emphSubParse(start+mlen, litMarker, elemType, isUnder)
+	// Fallback: a strong opener that cannot be closed as strong is retried as an em
+	// whose opener is only the first marker character (the second becomes body text).
+	if !found && elemType == ElStrong && sp.stackTop() != ElEm {
+		el, found = sp.emphSubParse(start+1, s[:1], ElEm, isUnder)
+	}
+	if !found {
+		sp.pos = start
+		return nil, litMarker
+	}
+	return el, ""
+}
+
+// emphSubParse parses an emphasis body of type elemType starting at contentPos,
+// stopping on delim. It pushes elemType onto the enclosing-type stack for the
+// duration, and on success consumes the closer and leaves sp.pos past it.
+func (sp *spanParser) emphSubParse(contentPos int, delim string, elemType ElementType, isUnder bool) (*Element, bool) {
+	sp.pos = contentPos
+	el := newEl(elemType)
+	stop := &emphStop{delim: delim, isEm: elemType == ElEm, isUnderscore: isUnder}
+	sp.stack = append(sp.stack, elemType)
+	savedDst := sp.dst
+	sp.dst = &el.Children
+	found := sp.parseInto(stop)
+	sp.dst = savedDst
+	sp.stack = sp.stack[:len(sp.stack)-1]
+	if found {
+		sp.pos += len(delim)
+	}
+	return el, found
+}
+
+// acceptClose reports whether the closer at sp.pos is a valid close for stop,
+// porting the block passed to parse_spans in parse_emphasis:
+//   - the preceding character is not whitespace,
+//   - for an :em, the closer is not exactly a doubled marker (which belongs to a
+//     strong close) unless it is tripled,
+//   - for "_", the closer is not immediately followed by an alphanumeric,
+//   - the element already has some content.
+func (sp *spanParser) acceptClose(stop *emphStop, hasContent bool) bool {
+	s := sp.src[sp.pos:]
+	if !strings.HasPrefix(s, stop.delim) {
+		return false
+	}
+	if sp.pos == 0 || isSpaceByte(sp.src[sp.pos-1]) {
+		return false
+	}
+	if stop.isEm {
+		dd := stop.delim + stop.delim
+		if strings.HasPrefix(s, dd) && !strings.HasPrefix(s, dd+stop.delim) {
+			return false
+		}
+	}
+	if stop.isUnderscore {
+		if after := s[len(stop.delim):]; len(after) > 0 && isAlnumByte(after[0]) {
+			return false
+		}
+	}
+	return hasContent
+}
+
+// stackHas reports whether an element of type t is currently open (the immediate
+// tree or any ancestor), matching @tree.type == element || @stack.any {…}.
+func (sp *spanParser) stackHas(t ElementType) bool {
+	for _, e := range sp.stack {
+		if e == t {
+			return true
+		}
+	}
+	return false
+}
+
+// stackTop returns the type of the immediately enclosing emphasis element, or a
+// sentinel (ElRoot) when parsing at the top level.
+func (sp *spanParser) stackTop() ElementType {
+	if len(sp.stack) == 0 {
+		return ElRoot
+	}
+	return sp.stack[len(sp.stack)-1]
+}
+
+// isAlnumByte reports whether b is an ASCII letter or digit ([[:alnum:]]).
+func isAlnumByte(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9')
 }
 
 // isSpaceByte reports whether b is an ASCII whitespace byte.
