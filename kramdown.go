@@ -51,12 +51,23 @@ type Options struct {
 	// SyntaxHighlighterOpts carries the highlighter's sub-options (default_lang,
 	// guess_lang, and the block:/span: disable flags).
 	SyntaxHighlighterOpts SyntaxHighlighterOpts
+	// LinkDefs supplies predefined link-reference definitions (kramdown's
+	// :link_defs): a reference id maps to a URL and an optional title, resolvable by
+	// "[text][id]" / "[id]" the same as a definition harvested from the source.
+	LinkDefs map[string]LinkDef
 	// TypographicSymbols overrides the replacement string kramdown emits for a named
 	// typographic symbol (hellip, mdash, ndash, laquo, raquo, laquo_space,
 	// raquo_space, lsquo, rsquo, ldquo, rdquo). A present entry is HTML-escaped and
 	// emitted verbatim in place of the default entity; an absent key keeps the
 	// default. Mirrors kramdown's :typographic_symbols option (default nil).
 	TypographicSymbols map[string]string
+}
+
+// LinkDef is a predefined link-reference definition supplied via the LinkDefs
+// option (kramdown's :link_defs): a destination URL and an optional title.
+type LinkDef struct {
+	URL   string
+	Title string
 }
 
 // DefaultOptions returns the option set matching kramdown's own defaults, used

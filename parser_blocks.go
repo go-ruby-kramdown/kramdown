@@ -17,6 +17,12 @@ func (p *parser) harvestDefinitions(lines []string) []string {
 	pendingAbbrevIAL := ""
 	pendingLinkIAL := ""
 	i := 0
+	// atBoundary tracks whether the current line sits at a block boundary (the start
+	// of the stream, right after a blank line, or right after a harvested definition
+	// — each of which kramdown treats as after_block_boundary?). A link-reference
+	// definition is only recognised at a boundary, so "[id]: url" sitting directly
+	// under a paragraph line stays part of that paragraph.
+	atBoundary := true
 	for i < len(lines) {
 		line := lines[i]
 		// A run of standalone block IALs immediately preceding a link-reference
@@ -28,6 +34,7 @@ func (p *parser) harvestDefinitions(lines []string) []string {
 				if j, attrs, hit := collectLinkDefIAL(lines, i); hit {
 					pendingLinkIAL = joinIAL(pendingLinkIAL, attrs)
 					i = j
+					atBoundary = true
 					continue
 				}
 			}
@@ -82,44 +89,42 @@ func (p *parser) harvestDefinitions(lines []string) []string {
 			// same boundary marker used for link definitions: it renders nothing and,
 			// unlike a source "^" marker, does not loosen a list it closes.
 			out = append(out, defBoundaryMarker)
+			atBoundary = true
 			continue
 		}
-		// Link/image reference definition: "[id]: url "title"" (title may continue
-		// on the next line).
-		if m := reLinkDef.FindStringSubmatch(line); m != nil {
-			id := normalizeRef(m[1])
-			url := m[2]
-			title := m[3]
-			if title == "" && i+1 < len(lines) {
-				if tm := reLinkDefTitle.FindStringSubmatch(lines[i+1]); tm != nil {
-					title = tm[1]
+		// Link/image reference definition: "[id]: url "title"" (the URL may contain
+		// spaces or be angle-bracketed, and the title may continue on the next line).
+		// kramdown only recognises it at a block boundary, so it is skipped when the
+		// previous line was ordinary paragraph text.
+		if atBoundary {
+			if id, url, title, consumed, ok := p.matchLinkDef(lines, i); ok {
+				id = normalizeRef(id)
+				ial := pendingLinkIAL
+				pendingLinkIAL = ""
+				i += consumed
+				// A run of standalone block IALs immediately after the definition also
+				// attaches to it; consume those lines too.
+				for i < len(lines) {
+					body, ok := matchBlockIAL(lines[i])
+					if !ok {
+						break
+					}
+					if _, _, isALD := splitALD(body); isALD {
+						break
+					}
+					ial = joinIAL(ial, body)
 					i++
 				}
-			}
-			ial := pendingLinkIAL
-			pendingLinkIAL = ""
-			i++
-			// A run of standalone block IALs immediately after the definition also
-			// attaches to it; consume those lines too.
-			for i < len(lines) {
-				body, ok := matchBlockIAL(lines[i])
-				if !ok {
-					break
+				p.linkDefs[id] = linkDef{url: url, title: title, ial: ial}
+				// kramdown leaves an ":eob :link_def" element here; a following block that
+				// is not separated by a blank line is therefore NOT at a block boundary (a
+				// table directly beneath a link-reference definition stays a paragraph).
+				if i < len(lines) && strings.TrimSpace(lines[i]) != "" {
+					out = append(out, defBoundaryMarker)
 				}
-				if _, _, isALD := splitALD(body); isALD {
-					break
-				}
-				ial = joinIAL(ial, body)
-				i++
+				atBoundary = true
+				continue
 			}
-			p.linkDefs[id] = linkDef{url: stripURLAngles(url), title: unquoteTitle(title), ial: ial}
-			// kramdown leaves an ":eob :link_def" element here; a following block that
-			// is not separated by a blank line is therefore NOT at a block boundary (a
-			// table directly beneath a link-reference definition stays a paragraph).
-			if i < len(lines) && strings.TrimSpace(lines[i]) != "" {
-				out = append(out, defBoundaryMarker)
-			}
-			continue
 		}
 		// A standalone block IAL immediately before an abbreviation definition
 		// augments that definition (kramdown attaches it to the abbreviation).
@@ -128,6 +133,7 @@ func (p *parser) harvestDefinitions(lines []string) []string {
 			if _, _, isALD := splitALD(body); !isALD {
 				pendingAbbrevIAL = body
 				i++
+				atBoundary = true
 				continue
 			}
 		}
@@ -151,20 +157,123 @@ func (p *parser) harvestDefinitions(lines []string) []string {
 			def.attr = strings.Join(attrs, " ")
 			p.abbrevs[text] = def
 			i++
+			atBoundary = true
 			continue
 		}
 		out = append(out, line)
+		atBoundary = strings.TrimSpace(line) == ""
 		i++
 	}
 	return out
 }
 
 var (
-	reLinkDef      = regexp.MustCompile(`^ {0,3}\[([^\]]+)\]:\s+(\S+)(?:\s+["'(](.*)["')])?\s*$`)
-	reLinkDefTitle = regexp.MustCompile(`^\s+["'(](.*)["')]\s*$`)
-	reAbbrevDef    = regexp.MustCompile(`^ {0,3}\*\[([^\]]+)\]:(.*)$`)
-	reFootnoteDef  = regexp.MustCompile(`^ {0,3}\[\^([^\]]+)\]:(.*)$`)
+	reLinkDef     = regexp.MustCompile(`^ {0,3}\[([^\]]+)\]:\s+(\S+)(?:\s+["'(](.*)["')])?\s*$`)
+	reAbbrevDef   = regexp.MustCompile(`^ {0,3}\*\[([^\]]+)\]:(.*)$`)
+	reFootnoteDef = regexp.MustCompile(`^ {0,3}\[\^([^\]]+)\]:(.*)$`)
+
+	// reLinkDefHead splits a candidate link-definition line into its id and the
+	// remainder after "]:" (0-3 leading spaces; the id is any run without "]" or a
+	// newline). kramdown's LINK_DEFINITION_START limits the indent to three spaces,
+	// so a four-space-indented "[id]: url" is an indented code block instead.
+	reLinkDefHead = regexp.MustCompile(`^ {0,3}\[([^\]\n]+)\]:[ \t]*(.*)$`)
+	// reLinkDefTitleDQ/SQ peel a trailing quoted title off a bare-URL remainder; the
+	// URL capture is greedy so the LAST quoted run becomes the title (matching
+	// kramdown's non-greedy URL that backtracks to the final title).
+	reLinkDefTitleDQ = regexp.MustCompile(`^(.*\S)[ \t]+"(.*)"[ \t]*$`)
+	reLinkDefTitleSQ = regexp.MustCompile(`^(.*\S)[ \t]+'(.*)'[ \t]*$`)
+	// reLinkDefTitleLineDQ/SQ match a title standing alone (inline after an angle URL
+	// or on the definition's next line).
+	reLinkDefTitleLineDQ = regexp.MustCompile(`^[ \t]*"(.*)"[ \t]*$`)
+	reLinkDefTitleLineSQ = regexp.MustCompile(`^[ \t]*'(.*)'[ \t]*$`)
+	// reURLSpaceQuote is kramdown's "space before a quote" guard: a bare URL that
+	// contains whitespace immediately before a quote is not a valid definition.
+	reURLSpaceQuote = regexp.MustCompile("[ \t][\"']")
 )
+
+// matchLinkDef recognises a link-reference definition beginning at lines[i],
+// mirroring kramdown's LINK_DEFINITION_START and its parse_link_definition guard.
+// It returns the id, URL and title, the number of source lines consumed (1, or 2
+// when the title is on the following line), and whether a definition was found. The
+// caller invokes it only at a block boundary.
+func (p *parser) matchLinkDef(lines []string, i int) (id, url, title string, consumed int, ok bool) {
+	m := reLinkDefHead.FindStringSubmatch(lines[i])
+	if m == nil {
+		return
+	}
+	id, rest := m[1], m[2]
+	// Angle-bracketed URL: "<…>" may contain spaces; an inline title may follow.
+	// kramdown tries this alternative first but backtracks to the bare-URL form when
+	// the "<…>" is unterminated or trailed by non-title text, so those fall through.
+	if strings.HasPrefix(rest, "<") {
+		if k := strings.Index(rest, ">"); k >= 0 {
+			url = rest[1:k]
+			after := strings.TrimLeft(rest[k+1:], " \t")
+			if after == "" {
+				if t, cok := linkDefTitleNextLine(lines, i); cok {
+					return id, url, t, 2, true
+				}
+				return id, url, "", 1, true
+			}
+			if t, tok := linkDefInlineTitle(after); tok {
+				return id, url, t, 1, true
+			}
+		}
+	}
+	// A bare URL must contain at least one non-space character.
+	if strings.TrimSpace(rest) == "" {
+		return
+	}
+	// A bare URL may contain spaces; peel off a trailing quoted title if present.
+	if u, t, tok := linkDefBareTitle(rest); tok {
+		if reURLSpaceQuote.MatchString(u) {
+			return "", "", "", 0, false
+		}
+		return id, strings.TrimRight(u, " \t"), t, 1, true
+	}
+	if reURLSpaceQuote.MatchString(rest) {
+		return "", "", "", 0, false // an unbalanced/misplaced title quote invalidates it
+	}
+	url = strings.TrimRight(rest, " \t")
+	if t, cok := linkDefTitleNextLine(lines, i); cok {
+		return id, url, t, 2, true
+	}
+	return id, url, "", 1, true
+}
+
+// linkDefInlineTitle returns the title text of a lone quoted string (an inline
+// title following an angle URL), and whether one was present.
+func linkDefInlineTitle(s string) (string, bool) {
+	if m := reLinkDefTitleLineDQ.FindStringSubmatch(s); m != nil {
+		return m[1], true
+	}
+	if m := reLinkDefTitleLineSQ.FindStringSubmatch(s); m != nil {
+		return m[1], true
+	}
+	return "", false
+}
+
+// linkDefBareTitle splits a bare-URL remainder into its URL and a trailing quoted
+// title, reporting whether such a title was found.
+func linkDefBareTitle(s string) (url, title string, ok bool) {
+	if m := reLinkDefTitleDQ.FindStringSubmatch(s); m != nil {
+		return m[1], m[2], true
+	}
+	if m := reLinkDefTitleSQ.FindStringSubmatch(s); m != nil {
+		return m[1], m[2], true
+	}
+	return "", "", false
+}
+
+// linkDefTitleNextLine returns a title standing alone on the line after a
+// definition (kramdown allows the title on the following line), and whether the
+// immediately-following non-blank line is such a title.
+func linkDefTitleNextLine(lines []string, i int) (string, bool) {
+	if i+1 >= len(lines) || strings.TrimSpace(lines[i+1]) == "" {
+		return "", false
+	}
+	return linkDefInlineTitle(lines[i+1])
+}
 
 // collectLinkDefIAL scans a run of consecutive standalone (non-ALD) block IALs
 // starting at index i and reports whether the line immediately after the run is a
@@ -209,23 +318,6 @@ func joinIAL(a, b string) string {
 func normalizeRef(s string) string {
 	s = strings.ToLower(strings.TrimSpace(s))
 	return regexp.MustCompile(`\s+`).ReplaceAllString(s, " ")
-}
-
-// stripURLAngles removes surrounding <...> from a reference URL.
-func stripURLAngles(u string) string {
-	u = strings.TrimSpace(u)
-	if strings.HasPrefix(u, "<") && strings.HasSuffix(u, ">") {
-		return u[1 : len(u)-1]
-	}
-	return u
-}
-
-// unquoteTitle strips matching surrounding quotes/parens from a captured title.
-func unquoteTitle(t string) string {
-	if t == "" {
-		return ""
-	}
-	return t
 }
 
 // parseList parses an ordered or unordered list starting at lines[start],
