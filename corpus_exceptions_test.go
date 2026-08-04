@@ -32,13 +32,4 @@ var corpusExceptions = map[string]bool{
 	"block/15_math/normal.text":    true,
 	"span/math/no_engine.text":     true,
 	"span/math/normal.text":        true,
-
-	// --- toc (5): Table-of-contents generation with non-default toc options (toc_levels ranges,
-	// exclusion). Depends on auto-id transliteration and the toc converter's runtime
-	// tree walk.
-	"block/16_toc/no_toc.text":             true,
-	"block/16_toc/toc_exclude.text":        true,
-	"block/16_toc/toc_levels.text":         true,
-	"block/16_toc/toc_with_footnotes.text": true,
-	"block/16_toc/toc_with_links.text":     true,
 }

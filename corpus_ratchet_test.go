@@ -105,6 +105,8 @@ func applyCorpusOptions(o Options, text string) Options {
 			o.RemoveLineBreaksForCJK = val == "true"
 		case "entity_output":
 			o.EntityOutput = strings.TrimPrefix(val, ":")
+		case "toc_levels":
+			o.TocLevels = parseTocLevels(val)
 		case "footnote_prefix":
 			o.FootnotePrefix = val
 		case "footnote_backlink":
@@ -126,6 +128,26 @@ func applyCorpusOptions(o Options, text string) Options {
 		}
 	}
 	return o
+}
+
+// parseTocLevels mirrors kramdown's :toc_levels normalisation for the two string
+// forms the corpus uses: a "a..b" range or a comma-separated list of levels.
+func parseTocLevels(val string) []int {
+	var levels []int
+	if lo, hi, ok := strings.Cut(val, ".."); ok {
+		l, _ := strconv.Atoi(strings.TrimSpace(lo))
+		h, _ := strconv.Atoi(strings.TrimSpace(hi))
+		for i := l; i <= h; i++ {
+			levels = append(levels, i)
+		}
+		return levels
+	}
+	for _, p := range strings.Split(val, ",") {
+		if n, err := strconv.Atoi(strings.TrimSpace(p)); err == nil {
+			levels = append(levels, n)
+		}
+	}
+	return levels
 }
 
 // applyCorpusLinkDefLine folds one indented "id: [url, title]" line of a
