@@ -436,7 +436,11 @@ func (c *htmlConverter) renderSpan(e *Element, b *strings.Builder, indent int) {
 	case ElBr:
 		b.WriteString("<br />\n")
 	case ElTypographicSym:
-		b.WriteString(symChar(e.Value))
+		if sub, ok := c.doc.Opts.TypographicSymbols[e.Value]; ok {
+			b.WriteString(escapeHTMLText(sub))
+		} else {
+			b.WriteString(symChar(e.Value))
+		}
 	case ElRawHTMLSpan:
 		b.WriteString(e.Value)
 	case ElAbbr:

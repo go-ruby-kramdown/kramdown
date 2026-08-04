@@ -84,7 +84,4 @@ var knownFailing = map[string]bool{
 
 	// span/extension (1)
 	"span/extension/options.text": true,
-
-	// span/text_substitutions (1)
-	"span/text_substitutions/typography_subst.text": true,
 }

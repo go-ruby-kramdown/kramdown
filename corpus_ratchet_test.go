@@ -36,20 +36,24 @@ const corpusRoot = "testdata/testcases"
 // stay in the ratchet's knownFailing ledger.
 func applyCorpusOptions(o Options, text string) Options {
 	sc := bufio.NewScanner(strings.NewReader(text))
-	inSHOpts := false // inside the :syntax_highlighter_opts subtree
-	subCtx := ""      // "block"/"span" nested map, or "" at the opts' top level
+	inSHOpts := false   // inside the :syntax_highlighter_opts subtree
+	inTypoSyms := false // inside the :typographic_symbols subtree
+	subCtx := ""        // "block"/"span" nested map, or "" at the opts' top level
 	for sc.Scan() {
 		line := sc.Text()
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
 		if line[0] == ' ' || line[0] == '\t' {
-			if inSHOpts {
+			switch {
+			case inSHOpts:
 				applyCorpusSHOptsLine(&o.SyntaxHighlighterOpts, line, &subCtx)
+			case inTypoSyms:
+				applyCorpusTypoSymLine(&o.TypographicSymbols, line)
 			}
 			continue // nested value of an unmodelled option
 		}
-		inSHOpts, subCtx = false, ""
+		inSHOpts, inTypoSyms, subCtx = false, false, ""
 		line = strings.TrimPrefix(line, ":") // ruby symbol key marker
 		key, val, ok := strings.Cut(line, ":")
 		if !ok {
@@ -81,9 +85,29 @@ func applyCorpusOptions(o Options, text string) Options {
 			o.SyntaxHighlighter = normalizeHighlighter(val)
 		case "syntax_highlighter_opts":
 			inSHOpts = true
+		case "typographic_symbols":
+			inTypoSyms = true
+			o.TypographicSymbols = map[string]string{}
 		}
 	}
 	return o
+}
+
+// applyCorpusTypoSymLine folds one indented "name: value" line of a
+// :typographic_symbols block into the override map, mirroring kramdown's option
+// (the symbol name keys hellip/mdash/…, the quoted scalar is the replacement).
+func applyCorpusTypoSymLine(m *map[string]string, line string) {
+	key, val, ok := strings.Cut(strings.TrimSpace(line), ":")
+	if !ok {
+		return
+	}
+	key = strings.TrimSpace(key)
+	val = strings.TrimSpace(val)
+	val = strings.Trim(val, `"'`)
+	if *m == nil {
+		*m = map[string]string{}
+	}
+	(*m)[key] = val
 }
 
 // applyCorpusSHOptsLine folds one indented line of a :syntax_highlighter_opts
