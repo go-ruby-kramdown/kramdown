@@ -5,6 +5,26 @@ import (
 	"testing"
 )
 
+// TestCoverDefGroupFollows drives the two defensive exits of defGroupFollows: a
+// blank-separated line that starts another block (so the run is not a fresh
+// term/definition group) and a plain line that reaches end-of-input without a
+// following ": …" marker. In both cases the definition list ends at the blank.
+func TestCoverDefGroupFollows(t *testing.T) {
+	// After the blank the next line is a list item -> defGroupFollows returns false,
+	// the list ends and the "* item" renders as a separate <ul>.
+	got := ToHTML("term\n: def\n\n* item\n", nil)
+	if !strings.Contains(got, "</dl>") || !strings.Contains(got, "<ul>") {
+		t.Errorf("blank-then-list-item: expected a closed <dl> and a <ul>, got:\n%s", got)
+	}
+
+	// After the blank a plain line runs to EOF with no marker -> defGroupFollows
+	// returns false and "foo" becomes a trailing paragraph.
+	got = ToHTML("term\n: def\n\nfoo\n", nil)
+	if !strings.Contains(got, "</dl>") || !strings.Contains(got, "<p>foo</p>") {
+		t.Errorf("blank-then-paragraph: expected a closed <dl> and <p>foo</p>, got:\n%s", got)
+	}
+}
+
 // TestCoverDefensiveBranches exercises the small defensive branches that the
 // rendering corpus does not reach on its own (unknown symbol name, empty-string
 // guards, the splitSub pre-sym short-circuit, and a fully-consumed IAL).

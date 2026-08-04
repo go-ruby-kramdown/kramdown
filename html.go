@@ -229,6 +229,32 @@ func (c *htmlConverter) generateId(raw string) string {
 	return s
 }
 
+// reAutoIDsRef matches a definition-list IAL reference that enables per-term id
+// generation, capturing an optional id prefix (kramdown's convert_dt).
+var reAutoIDsRef = regexp.MustCompile(`^auto_ids(?:-([\w-]+))?`)
+
+// autoIDFromDLRefs returns the id a <dt> with the given raw term text receives when
+// its parent <dl> carries an "auto_ids"/"auto_ids-<prefix>-" IAL reference.
+func autoIDFromDLRefs(dl *Element, raw string) (string, bool) {
+	refs, _ := dl.Options["ial_refs"].([]string)
+	for _, ref := range refs {
+		if m := reAutoIDsRef.FindStringSubmatch(ref); m != nil {
+			return strings.TrimLeft(m[1]+basicGenerateID(raw), " \t"), true
+		}
+	}
+	return "", false
+}
+
+// basicGenerateID slugifies raw the way kramdown's basic_generate_id does: it drops
+// leading non-letters, removes characters outside [A-Za-z0-9 -], turns spaces into
+// hyphens and lower-cases the result (no de-duplication or empty-id fallback).
+func basicGenerateID(raw string) string {
+	s := reIdLead.ReplaceAllString(raw, "")
+	s = reIdStrip.ReplaceAllString(s, "")
+	s = strings.ReplaceAll(s, " ", "-")
+	return strings.ToLower(s)
+}
+
 // convertCodeblock renders a code block. When the Rouge highlighter is enabled and
 // resolves a lexer for the block's language, it emits the gem's nested
 // highlighter-rouge markup; otherwise it degrades to the plain <pre><code> form,
@@ -347,6 +373,14 @@ func (c *htmlConverter) convertDL(e *Element, b *strings.Builder, indent int) {
 		switch ch.Type {
 		case ElDT:
 			raw, _ := ch.Options["raw"].(string)
+			// When the enclosing <dl> carries an "auto_ids" IAL reference and the term
+			// has no id of its own, kramdown's convert_dt derives one from the term text
+			// (basic_generate_id), optionally prefixed by the ref's "-prefix-" suffix.
+			if _, ok := ch.getAttr("id"); !ok {
+				if id, ok := autoIDFromDLRefs(e, raw); ok {
+					ch.setAttr("id", id)
+				}
+			}
 			b.WriteString(cpad + "<dt" + c.attrStr(ch) + ">" + c.renderRaw(raw, indent+1) + "</dt>\n")
 		case ElDD:
 			blocks := contentBlocks(ch.Children)
