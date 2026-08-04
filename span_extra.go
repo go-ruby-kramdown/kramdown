@@ -101,5 +101,7 @@ func abbrevPattern(k string) *regexp.Regexp {
 	for i := range parts {
 		parts[i] = regexp.QuoteMeta(parts[i])
 	}
-	return regexp.MustCompile(strings.Join(parts, `\s+`))
+	// A space in an abbreviation key matches a run of any whitespace or Unicode
+	// separator (kramdown's [\s\p{Z}]+), so it spans no-break spaces and newlines.
+	return regexp.MustCompile(strings.Join(parts, `[\s\p{Z}]+`))
 }

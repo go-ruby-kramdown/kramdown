@@ -47,6 +47,10 @@ var knownFailing = map[string]bool{
 	"block/14_table/simple.text": true,
 
 	// encoding.text (1)
+	// The table-cell UTF-8 double-encoding bug is fixed; two divergences remain and
+	// need the HTML5 block front-end (parse_block_html) this port lacks: inline raw
+	// HTML attribute quote normalization (<span id='x'> -> <span id="x">) and the
+	// block-level markdown="1" attribute (<p markdown='1'>…</p> reparses its body).
 	"encoding.text": true,
 
 	// span/01_link (2)
@@ -60,10 +64,10 @@ var knownFailing = map[string]bool{
 	"span/01_link/link_defs.text": true,
 	"span/01_link/reference.text": true,
 
-	// span/abbreviations (2)
-	"span/abbreviations/abbrev.text":         true,
+	// span/abbreviations (1)
+	// abbrev_in_html: the two <svg> blocks are byte-identical except a markdown="span"
+	// attribute on one <text> element, which must strip the attribute and span-parse
+	// (and abbreviate) only that element's body. That requires the HTML5 block
+	// front-end (parse_block_html with markdown attributes) this port lacks.
 	"span/abbreviations/abbrev_in_html.text": true,
-
-	// span/extension (1)
-	"span/extension/options.text": true,
 }

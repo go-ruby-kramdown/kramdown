@@ -324,7 +324,9 @@ func splitTableCells(line string, leadingPipe bool) []string {
 					cells = append(cells, "")
 					continue
 				}
-				appendLast(string(ct.s[k]))
+				// Append the raw byte: string(ct.s[k]) would reinterpret a single UTF-8
+				// byte as a code point and double-encode multibyte characters (ö -> Ã¶).
+				appendLast(ct.s[k : k+1])
 			}
 		}
 	}
