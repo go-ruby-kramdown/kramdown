@@ -13,14 +13,18 @@ package kramdown
 // should graduate out. Each bucket documents WHY it diverges.
 var corpusExceptions = map[string]bool{
 
-	// --- highlight (2): Syntax highlighting cases this port cannot yet close by wiring the
-	// pure-Go go-ruby-rouge highlighter. rouge/simple mixes a Ruby, an HTML and a
-	// PHP block; go-ruby-rouge ships no PHP lexer, so the third block's token spans
-	// cannot be reproduced. rouge/multiple additionally selects a bespoke
-	// RougeHTMLFormatters formatter defined inside kramdown's own Ruby test harness
-	// (it wraps every block in <div class="custom-class">), which no pure-Go wiring
-	// can supply. The remaining rouge cases (block & span highlighting, default_lang,
-	// guess_lang, syntax_highlighter: null, disable flags) now pass via the wiring.
+	// --- highlight (1): a syntax-highlighting case that is structurally out of
+	// scope for a pure-Go, no-Ruby-runtime port. rouge/multiple sets
+	// `formatter: RougeHTMLFormatters` in its options — a custom Rouge formatter
+	// subclass defined *only inside kramdown's own Ruby test harness*
+	// (kramdown 2.5.2 test/test_files.rb), whose #stream wraps every block's token
+	// stream in an extra <div class="custom-class">…</div>. It is not a kramdown
+	// library feature: the options file names an arbitrary Ruby class that the gem's
+	// test process happens to have loaded, so no pure-Go wiring can resolve or run
+	// it. (The three code blocks themselves — two Ruby, one PHP — now tokenise
+	// byte-for-byte; only the harness-injected wrapper div is unreachable.)
+	// rouge/simple is closed by the go-ruby-rouge PHP lexer + the tag-based
+	// language class; the remaining rouge cases (block & span highlighting,
+	// default_lang, guess_lang, syntax_highlighter: null, disable flags) pass too.
 	"block/06_codeblock/rouge/multiple.text": true,
-	"block/06_codeblock/rouge/simple.text":   true,
 }
