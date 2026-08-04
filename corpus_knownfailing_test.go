@@ -14,12 +14,6 @@ package kramdown
 // Grouped by kramdown feature; each cluster is closed in its own PR.
 var knownFailing = map[string]bool{
 
-	// block/06_codeblock (1)
-	// whitespace: the show-whitespaces converter renders literal tabs inside the
-	// code as <span class="ws-tab">\t</span>, but this port expands tabs to spaces
-	// in a global pre-pass, so the literal tab is no longer available.
-	"block/06_codeblock/whitespace.text": true,
-
 	// block/11_ial (2)
 	// nested: kramdown parses the "<div>…</div>" raw block as an HTML element and
 	// injects the leading/trailing IAL's class/id into the opening tag (and reparses
