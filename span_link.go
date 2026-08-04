@@ -225,6 +225,23 @@ func (sp *spanParser) tryAutolinkOrHTML() (*Element, int) {
 		return el, len(m[0])
 	}
 	if m := reHTMLSpan.FindStringSubmatch(s); m != nil {
+		// With parse_span_html disabled, an opening element's body is not parsed:
+		// swallow it up to the matching close tag and pass the whole element through
+		// raw (kramdown sets the element's content model to :raw in this case).
+		tag := m[1]
+		if !sp.p.opts.ParseSpanHTML && tag != "" && tag[0] != '/' && !strings.HasSuffix(tag, "/") {
+			name := tag
+			if i := strings.IndexAny(name, " \t"); i >= 0 {
+				name = name[:i]
+			}
+			closeTag := "</" + name + ">"
+			if idx := strings.Index(s[len(m[0]):], closeTag); idx >= 0 {
+				whole := s[:len(m[0])+idx+len(closeTag)]
+				el := newEl(ElRawHTMLSpan)
+				el.Value = whole
+				return el, len(whole)
+			}
+		}
 		el := newEl(ElRawHTMLSpan)
 		el.Value = "<" + m[1] + ">"
 		return el, len(m[0])

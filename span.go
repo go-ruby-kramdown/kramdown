@@ -165,8 +165,16 @@ func (sp *spanParser) trySpanExtension() (*Element, int, bool) {
 		return nil, 0, false
 	}
 	name, attrRaw, selfClose := m[1], m[2], m[3] == "/"
-	if name != "comment" && name != "nomarkdown" {
+	if name != "comment" && name != "nomarkdown" && name != "options" {
 		return nil, 0, false // unknown extension: literal
+	}
+	if name == "options" {
+		// A span-level {::options …} folds its recognised key="val" pairs into the
+		// parser options for the remainder of the document and renders nothing.
+		sp.p.applyInlineOptions(attrRaw)
+		if selfClose {
+			return nil, len(m[0]), true
+		}
 	}
 	if selfClose {
 		return nil, len(m[0]), true // no body -> nothing rendered
@@ -179,6 +187,9 @@ func (sp *spanParser) trySpanExtension() (*Element, int, bool) {
 	body := rest[:stopIdx]
 	consumed := len(m[0]) + stopIdx + stopLen
 	switch name {
+	case "options":
+		// Options were already applied above; the body is discarded.
+		return nil, consumed, true
 	case "comment":
 		el := newEl(ElRawHTMLSpan)
 		el.Value = "<!-- " + body + " -->"
@@ -233,7 +244,18 @@ func (sp *spanParser) push(el *Element, n int) {
 // emitText pushes a literal text run, applying hard-break detection for a
 // "  \n" sequence and storing the raw text for later typographic processing.
 func (sp *spanParser) emitText(s string) {
-	// Handle hard line breaks: two-or-more trailing spaces before a newline.
+	// Accumulate a single text run, breaking it only at hard line breaks. A soft
+	// break keeps its newline inside the run so that later passes (abbreviation
+	// replacement) see the same contiguous text node kramdown produces.
+	var buf strings.Builder
+	flush := func() {
+		if buf.Len() > 0 {
+			t := newEl(ElText)
+			t.Value = buf.String()
+			sp.out = append(sp.out, t)
+			buf.Reset()
+		}
+	}
 	for {
 		idx := strings.Index(s, "\n")
 		if idx < 0 {
@@ -241,37 +263,30 @@ func (sp *spanParser) emitText(s string) {
 		}
 		before := s[:idx]
 		trimmed := strings.TrimRight(before, " ")
-		t := newEl(ElText)
 		switch {
 		case len(before)-len(trimmed) >= 2:
 			// Two spaces before the newline are a hard break (kramdown's LINE_BREAK),
 			// independent of hard_wrap: drop exactly those two spaces (keeping any
 			// before them) and render <br />.
-			t.Value = before[:len(before)-2]
-			sp.out = append(sp.out, t)
+			buf.WriteString(before[:len(before)-2])
+			flush()
 			// The <br /> renders its own trailing newline, so don't add another.
 			sp.out = append(sp.out, newEl(ElBr))
 		case sp.p.opts.HardWrap:
 			// hard_wrap turns every newline into a break.
-			t.Value = trimmed
-			sp.out = append(sp.out, t)
+			buf.WriteString(trimmed)
+			flush()
 			sp.out = append(sp.out, newEl(ElBr))
 		default:
 			// A soft break keeps the line verbatim (kramdown preserves a lone trailing
-			// space).
-			t.Value = before
-			sp.out = append(sp.out, t)
-			nl := newEl(ElText)
-			nl.Value = "\n"
-			sp.out = append(sp.out, nl)
+			// space) with its newline, as part of the same text run.
+			buf.WriteString(before)
+			buf.WriteByte('\n')
 		}
 		s = s[idx+1:]
 	}
-	if s != "" {
-		t := newEl(ElText)
-		t.Value = s
-		sp.out = append(sp.out, t)
-	}
+	buf.WriteString(s)
+	flush()
 }
 
 // emitLiteral pushes a text node whose content is exempt from typographic

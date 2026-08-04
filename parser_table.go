@@ -324,7 +324,7 @@ func splitTableCells(line string, leadingPipe bool) []string {
 					cells = append(cells, "")
 					continue
 				}
-				appendLast(string(ct.s[k]))
+				appendLast(ct.s[k : k+1])
 			}
 		}
 	}

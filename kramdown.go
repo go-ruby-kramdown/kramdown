@@ -41,6 +41,10 @@ type Options struct {
 	// SyntaxHighlighterOpts carries the highlighter's sub-options (default_lang,
 	// guess_lang, and the block:/span: disable flags).
 	SyntaxHighlighterOpts SyntaxHighlighterOpts
+	// ParseSpanHTML, when true (kramdown's default), parses the markdown content of
+	// a raw inline HTML element (so <span>*x*</span> emphasises its body). When set
+	// false via a {::options} extension, the element's body is passed through raw.
+	ParseSpanHTML bool
 	// TypographicSymbols overrides the replacement string kramdown emits for a named
 	// typographic symbol (hellip, mdash, ndash, laquo, raquo, laquo_space,
 	// raquo_space, lsquo, rsquo, ldquo, rdquo). A present entry is HTML-escaped and
@@ -60,6 +64,7 @@ func DefaultOptions() Options {
 		FootnoteNr:        1,
 		FootnoteBacklink:  "&#8617;",
 		SyntaxHighlighter: "rouge",
+		ParseSpanHTML:     true,
 	}
 }
 
