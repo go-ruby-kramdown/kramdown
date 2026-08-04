@@ -261,22 +261,23 @@ func TestLinkEdges(t *testing.T) {
 	eq(t, "[a\\]b](u)\n", "<p><a href=\"u\">a]b</a></p>\n")
 }
 
-// TestInlineLinkTitleAndParens covers matchParenClose tracking a quoted title with
-// parens and splitDestTitle's title extraction.
+// TestInlineLinkTitleAndParens covers the inline destination scanner tracking a
+// quoted title that itself contains parens.
 func TestInlineLinkTitleParens(t *testing.T) {
 	eq(t, "[t](http://x \"a (b) c\")\n", "<p><a href=\"http://x\" title=\"a (b) c\">t</a></p>\n")
-	// A destination with an escaped char.
-	eq(t, "[t](a\\)b)\n", "<p><a href=\"a)b\">t</a></p>\n")
+	// Like the gem, a ")" closes the destination even when backslash-preceded: the
+	// scanner stops at the first ")" (href "a\") and the rest ("b)") is literal text.
+	eq(t, "[t](a\\)b)\n", "<p><a href=\"a\\\">t</a>b)</p>\n")
 }
 
-// TestAutolinkEdgeAndPlainText covers tryAutolinkOrHTML mailto display trimming and
-// plainText over a link's children for an image alt.
+// TestAutolinkAndAltText covers image alt text, which the gem takes verbatim from
+// the raw source between the brackets (escapes reduced) rather than rendering it.
 func TestAutolinkAndAltText(t *testing.T) {
-	// An image whose alt comes from emphasised link text (plainText recursion).
-	eq(t, "![*x* y](i.png)\n", "<p><img src=\"i.png\" alt=\"x y\" /></p>\n")
-	// An image alt built from a code span and a typographic dash.
+	// Emphasis markers stay literal in the alt (no span rendering).
+	eq(t, "![*x* y](i.png)\n", "<p><img src=\"i.png\" alt=\"*x* y\" /></p>\n")
+	// A code span and a dash also stay literal in the alt.
 	got := h("![`c` -- d](i.png)\n")
-	if !strings.Contains(got, `alt="c -- d"`) {
+	if !strings.Contains(got, "alt=\"`c` -- d\"") {
 		t.Errorf("alt code/dash = %q", got)
 	}
 }
@@ -353,9 +354,10 @@ func TestRawHTMLSpanTypography(t *testing.T) {
 
 // TestUnescapeLinkTextBranch covers unescapeLinkText: a backslash before a
 // non-escapable character is kept verbatim, while an escapable one is unescaped.
-func TestUnescapeLinkTextBranch(t *testing.T) {
+func TestLinkDestBackslash(t *testing.T) {
 	// "\d" is not an escapable sequence, so the backslash survives in the href.
 	eq(t, "[t](a\\db)\n", "<p><a href=\"a\\db\">t</a></p>\n")
-	// "\)" is escapable inside the destination, unescaped to a literal ")".
-	eq(t, "[t](a\\)b )\n", "<p><a href=\"a)b\">t</a></p>\n")
+	// The gem's destination scanner stops at the ")" regardless of a leading
+	// backslash, so href is "a\" and "b )" trails as literal text.
+	eq(t, "[t](a\\)b )\n", "<p><a href=\"a\\\">t</a>b )</p>\n")
 }

@@ -132,11 +132,16 @@ func TestAbbrevTwoDefs(t *testing.T) {
 	}
 }
 
-// TestFootnoteRefInImageAlt covers plainText's ElFootnoteRef branch via an image
-// whose alt text carries a footnote reference.
+// TestFootnoteRefInAlt covers the gem's bracket-count quirk: a footnote marker in
+// an image's text is consumed by the footnote parser (it eats its own "]"), which
+// unbalances the image brackets so the "![…](…)" is left literal and the footnote
+// renders on its own.
 func TestFootnoteRefInAlt(t *testing.T) {
 	got := h("![pre [^n] post](i.png)\n\n[^n]: note\n")
-	if !strings.Contains(got, `alt="pre n post"`) {
+	if strings.Contains(got, "<img") {
+		t.Errorf("expected no image, got %q", got)
+	}
+	if !strings.Contains(got, `![pre <sup id="fnref:n">`) || !strings.Contains(got, ` post](i.png)</p>`) {
 		t.Errorf("fn in alt = %q", got)
 	}
 }

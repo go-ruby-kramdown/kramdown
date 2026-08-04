@@ -15,9 +15,23 @@ import (
 func (p *parser) harvestDefinitions(lines []string) []string {
 	var out []string
 	pendingAbbrevIAL := ""
+	pendingLinkIAL := ""
 	i := 0
 	for i < len(lines) {
 		line := lines[i]
+		// A run of standalone block IALs immediately preceding a link-reference
+		// definition attaches to that definition (kramdown applies the pending
+		// block IAL to the :eob element the definition creates). Intercept the run
+		// here so the IAL lines are consumed rather than emitted as paragraphs.
+		if body, ok := matchBlockIAL(line); ok {
+			if _, _, isALD := splitALD(body); !isALD {
+				if j, attrs, hit := collectLinkDefIAL(lines, i); hit {
+					pendingLinkIAL = joinIAL(pendingLinkIAL, attrs)
+					i = j
+					continue
+				}
+			}
+		}
 		// Footnote definition: "[^id]: ...". Checked before the link-reference
 		// definition because "[^x]" also satisfies the looser "[id]" link pattern.
 		if m := reFootnoteDef.FindStringSubmatch(line); m != nil {
@@ -71,8 +85,23 @@ func (p *parser) harvestDefinitions(lines []string) []string {
 					i++
 				}
 			}
-			p.linkDefs[id] = linkDef{url: stripURLAngles(url), title: unquoteTitle(title)}
+			ial := pendingLinkIAL
+			pendingLinkIAL = ""
 			i++
+			// A run of standalone block IALs immediately after the definition also
+			// attaches to it; consume those lines too.
+			for i < len(lines) {
+				body, ok := matchBlockIAL(lines[i])
+				if !ok {
+					break
+				}
+				if _, _, isALD := splitALD(body); isALD {
+					break
+				}
+				ial = joinIAL(ial, body)
+				i++
+			}
+			p.linkDefs[id] = linkDef{url: stripURLAngles(url), title: unquoteTitle(title), ial: ial}
 			// kramdown leaves an ":eob :link_def" element here; a following block that
 			// is not separated by a blank line is therefore NOT at a block boundary (a
 			// table directly beneath a link-reference definition stays a paragraph).
@@ -125,6 +154,44 @@ var (
 	reAbbrevDef    = regexp.MustCompile(`^ {0,3}\*\[([^\]]+)\]:(.*)$`)
 	reFootnoteDef  = regexp.MustCompile(`^ {0,3}\[\^([^\]]+)\]:(.*)$`)
 )
+
+// collectLinkDefIAL scans a run of consecutive standalone (non-ALD) block IALs
+// starting at index i and reports whether the line immediately after the run is a
+// link-reference definition. When it is, it returns the index of that definition
+// line, the run's attributes joined into one IAL body, and true; otherwise it
+// returns false so the caller leaves the IAL lines to normal block handling.
+func collectLinkDefIAL(lines []string, i int) (int, string, bool) {
+	attrs := ""
+	j := i
+	for j < len(lines) {
+		body, ok := matchBlockIAL(lines[j])
+		if !ok {
+			break
+		}
+		if _, _, isALD := splitALD(body); isALD {
+			break
+		}
+		attrs = joinIAL(attrs, body)
+		j++
+	}
+	if j == i || j >= len(lines) || !reLinkDef.MatchString(lines[j]) {
+		return 0, "", false
+	}
+	return j, attrs, true
+}
+
+// joinIAL concatenates two raw IAL attribute bodies, separating them with a space
+// when both are non-empty so their attributes accumulate onto one element.
+func joinIAL(a, b string) string {
+	switch {
+	case a == "":
+		return b
+	case b == "":
+		return a
+	default:
+		return a + " " + b
+	}
+}
 
 // normalizeRef lowercases and collapses internal whitespace of a reference id the
 // way kramdown matches link references case-insensitively.
