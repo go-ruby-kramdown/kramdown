@@ -79,6 +79,8 @@ func applyCorpusOptions(o Options, text string) Options {
 			o.FootnotePrefix = val
 		case "footnote_backlink":
 			o.FootnoteBacklink = val
+		case "footnote_backlink_inline":
+			o.FootnoteBacklinkInline = val == "true"
 		case "footnote_link_text":
 			o.FootnoteLinkText = val
 		case "syntax_highlighter":

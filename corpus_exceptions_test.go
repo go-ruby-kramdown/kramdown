@@ -76,10 +76,10 @@ var corpusExceptions = map[string]bool{
 	"block/06_codeblock/rouge/multiple.text": true,
 	"block/06_codeblock/rouge/simple.text":   true,
 
-	// --- math (5): Math via a math engine. kramdown's default MathJax engine and the itex2mml /
-	// KaTeX engines wrap or transform LaTeX; the exact wrapper markup is
-	// engine/version specific and depends on the Ruby math_engine plugin.
-	"block/15_math/gh_128.text":    true,
+	// --- math (4): Math via a math engine. The default MathJax engine's plain
+	// "\[…\]"/"\(…\)" wrapping is now supported for single-line block math (so
+	// gh_128 passes), but these remaining cases need the itex2mml/KaTeX or
+	// :math_engine ~ fallback markup, or multi-line/edge-case block+span handling.
 	"block/15_math/no_engine.text": true,
 	"block/15_math/normal.text":    true,
 	"span/math/no_engine.text":     true,
