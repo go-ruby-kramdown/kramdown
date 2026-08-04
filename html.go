@@ -20,7 +20,15 @@ type htmlConverter struct {
 	footNums  map[string]int // id -> assigned number
 	footRefs  map[string]int // id -> how many times referenced (for backlinks)
 	footDefs  map[string]*Element
+	footLoc   string // non-empty sentinel marking a {:footnotes} placement site
 }
+
+// footnoteSentinel is the placeholder a {:footnotes}-tagged list renders to; at the
+// end of the conversion it is substituted for the footnote block, mirroring
+// kramdown's @footnote_location mechanism (a random string emitted in place of the
+// list, then replaced in convert_root). Wrapped in NUL bytes so it can never collide
+// with real output.
+const footnoteSentinel = "\x00kramdown:footnotes\x00"
 
 // newHTMLConverter builds a converter bound to doc.
 func newHTMLConverter(doc *Document) *htmlConverter {
@@ -47,7 +55,15 @@ func (c *htmlConverter) convert() string {
 	var b strings.Builder
 	c.convertChildren(c.doc.Root.Children, &b, 0)
 	out := b.String()
-	out = c.appendFootnotes(out)
+	fc := c.footnoteContent()
+	if c.footLoc != "" {
+		// A {:footnotes} directive placed the block explicitly: substitute the
+		// footnote content for the sentinel the tagged list rendered to, instead of
+		// appending it (kramdown's convert_root sub!). An empty fc drops the sentinel.
+		out = strings.Replace(out, c.footLoc, fc, 1)
+	} else {
+		out += fc
+	}
 	return out
 }
 
@@ -436,6 +452,14 @@ func (c *htmlConverter) codeblockPreAttr(e *Element, stripLang bool, lang string
 // convertList renders a <ul>/<ol>, eliding the <p> wrapper of a tight item's lone
 // paragraph.
 func (c *htmlConverter) convertList(e *Element, b *strings.Builder, indent int) {
+	// A list carrying the {:footnotes} IAL reference is a placement directive: it is
+	// replaced by the footnote block at this location (kramdown's convert_ul footnote
+	// branch). Only the first such list wins; a later one renders normally.
+	if c.footLoc == "" && ialHasRef(e, "footnotes") {
+		c.footLoc = footnoteSentinel
+		b.WriteString(footnoteSentinel)
+		return
+	}
 	pad := ind(indent)
 	tag := "ul"
 	if e.Type == ElOL {

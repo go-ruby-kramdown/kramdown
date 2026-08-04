@@ -53,26 +53,32 @@ func (p *parser) harvestDefinitions(lines []string) []string {
 				body = append(body, first)
 			}
 			i++
-			// Continuation lines: blank lines or 4-space-indented lines belong to the
-			// note.
+			// Continuation lines: a 4-space-indented line belongs to the note, and a
+			// blank line only when it is itself followed (before any unindented content)
+			// by more indented text — mirroring kramdown's CODEBLOCK_MATCH, which pairs
+			// each blank with a following indented run. Trailing blank lines that lead to
+			// no further indented content are NOT part of the note: they stay in the
+			// stream as the block separation after the definition.
+			pendingBlanks := 0
 			for i < len(lines) {
 				l := lines[i]
 				if strings.TrimSpace(l) == "" {
-					body = append(body, "")
+					pendingBlanks++
 					i++
 					continue
 				}
 				if strings.HasPrefix(l, "    ") || strings.HasPrefix(l, "\t") {
+					for ; pendingBlanks > 0; pendingBlanks-- {
+						body = append(body, "")
+					}
 					body = append(body, stripIndent(expandTabs(l), 4))
 					i++
 					continue
 				}
 				break
 			}
-			// Trim trailing blanks.
-			for len(body) > 0 && strings.TrimSpace(body[len(body)-1]) == "" {
-				body = body[:len(body)-1]
-			}
+			// Give back the trailing blank lines not absorbed into the note.
+			i -= pendingBlanks
 			fn := newEl(ElFootnoteDef)
 			fn.Options["leading_blank"] = leadingBlank
 			p.parseBlocks(body, fn)

@@ -10,15 +10,17 @@ import (
 	"strings"
 )
 
-// appendFootnotes appends the collected footnote definitions as kramdown's
-// <div class="footnotes"> … </div> section, with a backlink for each reference.
-func (c *htmlConverter) appendFootnotes(body string) string {
+// footnoteContent renders the collected footnote definitions as kramdown's
+// <div class="footnotes"> … </div> section (with a backlink for each reference), or
+// the empty string when there are no footnotes. The caller either appends it to the
+// body or, for a {:footnotes} placement, substitutes it for the sentinel — kramdown
+// adds no separator of its own, so any blank line before the block comes from the
+// document body itself (footnote_content in the gem).
+func (c *htmlConverter) footnoteContent() string {
 	if len(c.footOrder) == 0 {
-		return body
+		return ""
 	}
 	var b strings.Builder
-	b.WriteString(strings.TrimRight(body, "\n"))
-	b.WriteString("\n\n")
 	b.WriteString(`<div class="footnotes" role="doc-endnotes">` + "\n")
 	if c.doc.Opts.FootnoteNr != 1 {
 		b.WriteString(`  <ol start="` + strconv.Itoa(c.doc.Opts.FootnoteNr) + `">` + "\n")
