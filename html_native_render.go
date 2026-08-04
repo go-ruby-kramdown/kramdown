@@ -46,6 +46,25 @@ func (c *htmlConverter) convertNativeBlock(e *Element, indent int) string {
 		return formatAsBlockHTML("dt", e.Attrs, c.nativeInner(e, indent), indent)
 	case ElHR:
 		return ind(indent) + "<hr" + htmlAttributes(e.Attrs) + " />\n"
+	case ElCodeblock:
+		// A <pre> converted by convert_pre; its value already carries the chomp+"\n"
+		// normalisation, so the shared code-block renderer emits it byte-for-byte
+		// (degrading to plain <pre><code> when no language resolves a highlighter).
+		var b strings.Builder
+		c.convertCodeblock(e, &b, indent)
+		return b.String()
+	case ElTable:
+		return formatAsIndentedBlockHTML("table", e.Attrs, c.nativeInner(e, indent), indent)
+	case ElThead:
+		return formatAsIndentedBlockHTML("thead", e.Attrs, c.nativeInner(e, indent), indent)
+	case ElTbody:
+		return formatAsIndentedBlockHTML("tbody", e.Attrs, c.nativeInner(e, indent), indent)
+	case ElTfoot:
+		return formatAsIndentedBlockHTML("tfoot", e.Attrs, c.nativeInner(e, indent), indent)
+	case ElTr:
+		return formatAsIndentedBlockHTML("tr", e.Attrs, c.nativeInner(e, indent), indent)
+	case ElTd:
+		return c.convertNativeTd(e, indent)
 	case ElHTMLElement:
 		// A raw content-model element (e.g. a non-simple <table> kept raw) serialises
 		// through the existing verbatim raw-HTML path, which reproduces its preserved
@@ -117,6 +136,35 @@ func (c *htmlConverter) convertNativeLI(tag string, e *Element, indent int) stri
 	}
 	b.WriteString("</" + tag + ">\n")
 	return b.String()
+}
+
+// convertNativeTd ports convert_td for a converted simple-table cell: it renders as
+// <th> inside a thead section (recorded in celltag) else <td>, applies the column
+// alignment as a text-align style (appended after any existing style), and emits a
+// non-breaking space for an empty cell.
+func (c *htmlConverter) convertNativeTd(e *Element, indent int) string {
+	res := c.nativeInner(e, indent)
+	// celltag is always recorded by annotateCells for every converted cell.
+	tag, _ := e.Options["celltag"].(string)
+	attrs := e.Attrs
+	if align, _ := e.Options["cellalign"].(string); align != "" && align != "default" {
+		attrs = append([]Attr(nil), e.Attrs...)
+		found := false
+		for i := range attrs {
+			if attrs[i].Name == "style" {
+				attrs[i].Val += "; text-align: " + align
+				found = true
+				break
+			}
+		}
+		if !found {
+			attrs = append(attrs, Attr{Name: "style", Val: "text-align: " + align})
+		}
+	}
+	if res == "" {
+		res = " "
+	}
+	return formatAsBlockHTML(tag, attrs, res, indent)
 }
 
 // convertNativeHTMLElement ports convert_html_element's block-category, non-raw path
