@@ -60,11 +60,6 @@ var corpusExceptions = map[string]bool{
 	"block/16_toc/toc_with_footnotes.text": true,
 	"block/16_toc/toc_with_links.text":     true,
 
-	// --- headeropt (2): header_offset / header_links options — remap header levels or inject anchor
-	// links; not modelled by this port's Options.
-	"block/04_header/header_type_offset.text": true,
-	"block/04_header/with_header_links.text":  true,
-
 	// --- translit (1): transliterated_header_ids — auto-ids built from Unicode-to-ASCII
 	// transliteration (the gem's stringex-style table).
 	"block/04_header/with_auto_ids.text": true,

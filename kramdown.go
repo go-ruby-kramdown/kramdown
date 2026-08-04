@@ -13,6 +13,14 @@ type Options struct {
 	AutoIds bool
 	// AutoIdPrefix is prepended to every auto-generated header id (default "").
 	AutoIdPrefix string
+	// HeaderOffset shifts every header's output level by this amount, clamped to
+	// 1..6 (an h1 with offset 1 renders as <h2>). Mirrors kramdown's :header_offset
+	// option (default 0).
+	HeaderOffset int
+	// HeaderLinks, when true, prepends an empty self-anchor (<a href="#id"></a>) to
+	// every header that carries a non-blank id. Mirrors kramdown's :header_links
+	// option (default false).
+	HeaderLinks bool
 	// SmartQuotes enables typographic substitution of quotes/dashes/ellipses
 	// (kramdown's default).
 	SmartQuotes bool
