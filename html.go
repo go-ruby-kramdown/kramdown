@@ -633,7 +633,7 @@ func (c *htmlConverter) renderSpan(e *Element, b *strings.Builder, indent int) {
 		if sub, ok := c.doc.Opts.TypographicSymbols[e.Value]; ok {
 			b.WriteString(escapeHTMLText(sub))
 		} else {
-			b.WriteString(symChar(e.Value))
+			b.WriteString(renderSym(e.Value, c.doc.Opts.EntityOutput))
 		}
 	case ElRawHTMLSpan:
 		b.WriteString(e.Value)

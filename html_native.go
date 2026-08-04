@@ -711,7 +711,7 @@ func codePointChar(digits string, base int) (string, bool) {
 
 // namedCodeEntity maps a named HTML entity to its character for code decoding. It
 // covers the XML built-ins plus the smart-quote / typographic set this port models
-// (via symChar); any other name is left unresolved for the amp fallback.
+// (via symParts); any other name is left unresolved for the amp fallback.
 func namedCodeEntity(name string) (string, bool) {
 	switch name {
 	case "lt":
@@ -727,8 +727,12 @@ func namedCodeEntity(name string) (string, bool) {
 	case "nbsp":
 		return " ", true
 	}
-	if s := symChar(name); s != "" {
-		return s, true
+	if parts, ok := symParts[name]; ok {
+		var b strings.Builder
+		for _, p := range parts {
+			b.WriteRune(rune(p.cp))
+		}
+		return b.String(), true
 	}
 	return "", false
 }
