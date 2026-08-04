@@ -88,7 +88,6 @@ func (c *htmlConverter) convertBlock(e *Element, b *strings.Builder, indent int)
 			c.convertStandaloneImage(e, els[0], b, indent)
 			return
 		}
-		els = c.applyTypography(els)
 		var sb strings.Builder
 		c.renderSpanEls(els, &sb, indent)
 		b.WriteString(pad + "<p" + c.attrStr(e) + ">" + sb.String() + "</p>\n")
@@ -214,7 +213,14 @@ func (c *htmlConverter) convertHeader(e *Element, b *strings.Builder, indent int
 		e.setAttr("id", id)
 		c.usedIds[id] = true
 	} else if c.doc.Opts.AutoIds {
-		id := c.generateId(raw)
+		// kramdown slugs options[:raw_text]: the literal header source by default, or —
+		// under the deprecated :auto_id_stripping — the concatenation of the header's
+		// parsed :text descendants (its update_raw_text pass).
+		idSource := raw
+		if c.doc.Opts.AutoIdStripping {
+			idSource = strippedText(c.doc.parseSpansFor(raw))
+		}
+		id := c.generateId(idSource)
 		if id != "" {
 			e.setAttr("id", c.doc.Opts.AutoIdPrefix+id)
 		}
@@ -246,16 +252,31 @@ func outputHeaderLevel(level, offset int) int {
 var reIdStrip = regexp.MustCompile(`[^a-zA-Z0-9 -]`)
 var reIdLead = regexp.MustCompile(`^[^a-zA-Z]+`)
 
+// strippedText concatenates the values of every :text descendant of els, porting
+// kramdown's update_raw_text (used for :auto_id_stripping headers and definition
+// terms): non-text spans — codespans, entities, typographic symbols, footnote
+// references — contribute nothing.
+func strippedText(els []*Element) string {
+	var b strings.Builder
+	for _, e := range els {
+		if e.Type == ElText {
+			b.WriteString(e.Value)
+			continue
+		}
+		b.WriteString(strippedText(e.Children))
+	}
+	return b.String()
+}
+
 // generateId derives a header id from its raw text the way kramdown's auto_ids do,
 // de-duplicating with a "-N" suffix.
 func (c *htmlConverter) generateId(raw string) string {
-	// Render to plain text (markup stripped), optionally transliterate to ASCII, then
-	// slug it with kramdown's basic_generate_id rules.
-	plain := plainText(c.doc.parseSpansFor(raw))
+	// kramdown slugs the header's raw source text (options[:raw_text]) directly:
+	// optionally transliterated to ASCII, then run through basic_generate_id.
 	if c.doc.Opts.TransliteratedHeaderIds {
-		plain = transliterate(plain)
+		raw = transliterate(raw)
 	}
-	s := basicGenerateID(plain)
+	s := basicGenerateID(raw)
 	if s == "" {
 		s = "section"
 	}
@@ -588,7 +609,6 @@ func (c *htmlConverter) renderSpans(e *Element, indent int) string {
 // renderRaw parses raw inline text and renders it to HTML.
 func (c *htmlConverter) renderRaw(raw string, indent int) string {
 	els := c.parseSpansRender(raw)
-	els = c.applyTypography(els)
 	var b strings.Builder
 	c.renderSpanEls(els, &b, indent)
 	return b.String()

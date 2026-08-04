@@ -13,6 +13,10 @@ type Options struct {
 	AutoIds bool
 	// AutoIdPrefix is prepended to every auto-generated header id (default "").
 	AutoIdPrefix string
+	// AutoIdStripping, when true, slugs a header id from the header's parsed plain
+	// text (markup/HTML stripped) instead of its literal source. Mirrors kramdown's
+	// deprecated :auto_id_stripping option (default false).
+	AutoIdStripping bool
 	// HeaderOffset shifts every header's output level by this amount, clamped to
 	// 1..6 (an h1 with offset 1 renders as <h2>). Mirrors kramdown's :header_offset
 	// option (default 0).

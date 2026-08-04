@@ -162,8 +162,22 @@ func (sp *spanParser) parseInto(stop *emphStop) bool {
 			lit.WriteByte('!')
 			sp.pos++
 		case '<':
-			// A "<<" guillemet opener is not an HTML tag: skip autolink/HTML when this
-			// "<" is the second of a pair or is immediately followed by another "<".
+			// A "<<" guillemet opener (kramdown's typographic_syms parser) is not an HTML
+			// tag. With typography on it becomes a laquo, taking an immediately following
+			// space into the laquo_space variant.
+			if sp.p.opts.Typographic && sp.pos+1 < len(sp.src) && sp.src[sp.pos+1] == '<' {
+				flush()
+				if sp.pos+2 < len(sp.src) && sp.src[sp.pos+2] == ' ' {
+					*sp.dst = append(*sp.dst, typoSym("laquo_space"))
+					sp.pos += 3
+				} else {
+					*sp.dst = append(*sp.dst, typoSym("laquo"))
+					sp.pos += 2
+				}
+				continue
+			}
+			// A "<<" with typography off stays literal (both angles), so skip autolink/HTML
+			// when this "<" is the second of a pair or is immediately followed by another.
 			doubled := (sp.pos > 0 && sp.src[sp.pos-1] == '<') ||
 				(sp.pos+1 < len(sp.src) && sp.src[sp.pos+1] == '<')
 			if !doubled {
@@ -178,6 +192,52 @@ func (sp *spanParser) parseInto(stop *emphStop) bool {
 			}
 			lit.WriteByte('<')
 			sp.pos++
+		case '>':
+			// A ">>" guillemet closer becomes a raquo, absorbing an immediately preceding
+			// space (already buffered) into the raquo_space variant.
+			if sp.p.opts.Typographic && sp.pos+1 < len(sp.src) && sp.src[sp.pos+1] == '>' {
+				if s := lit.String(); strings.HasSuffix(s, " ") {
+					lit.Reset()
+					lit.WriteString(s[:len(s)-1])
+					flush()
+					*sp.dst = append(*sp.dst, typoSym("raquo_space"))
+				} else {
+					flush()
+					*sp.dst = append(*sp.dst, typoSym("raquo"))
+				}
+				sp.pos += 2
+				continue
+			}
+			lit.WriteByte('>')
+			sp.pos++
+		case '-':
+			// "---" -> mdash, "--" -> ndash (kramdown's typographic_syms parser).
+			if sp.p.opts.Typographic {
+				if strings.HasPrefix(sp.src[sp.pos:], "---") {
+					flush()
+					*sp.dst = append(*sp.dst, typoSym("mdash"))
+					sp.pos += 3
+					continue
+				}
+				if strings.HasPrefix(sp.src[sp.pos:], "--") {
+					flush()
+					*sp.dst = append(*sp.dst, typoSym("ndash"))
+					sp.pos += 2
+					continue
+				}
+			}
+			lit.WriteByte('-')
+			sp.pos++
+		case '.':
+			// "..." -> hellip.
+			if sp.p.opts.Typographic && strings.HasPrefix(sp.src[sp.pos:], "...") {
+				flush()
+				*sp.dst = append(*sp.dst, typoSym("hellip"))
+				sp.pos += 3
+				continue
+			}
+			lit.WriteByte('.')
+			sp.pos++
 		case '{':
 			if el, n, ok := sp.trySpanExtension(); ok {
 				flush()
@@ -188,6 +248,32 @@ func (sp *spanParser) parseInto(stop *emphStop) bool {
 				continue
 			}
 			lit.WriteByte('{')
+			sp.pos++
+		case '"', '\'':
+			// Smart quotes are resolved during span parsing (kramdown's smart_quotes
+			// parser) so the direction can see the raw preceding/following source. The
+			// preceding character is "available" as the rules' leading group only when it
+			// is buffered plain text — a construct (emphasis/link/escape) that consumed it
+			// leaves the buffer empty, dispatching the rules at the quote itself.
+			if sp.p.opts.SmartQuotes {
+				pa := lit.Len() > 0
+				var pb byte
+				if pa {
+					pb = sp.src[sp.pos-1]
+				}
+				items, consumed := smartQuoteAt(sp.src, sp.pos, pa, pb)
+				flush()
+				for _, it := range items {
+					if it.sym != "" {
+						*sp.dst = append(*sp.dst, typoSym(it.sym))
+					} else {
+						sp.emitLiteral(it.text)
+					}
+				}
+				sp.pos += consumed
+				continue
+			}
+			lit.WriteByte(c)
 			sp.pos++
 		case '\n':
 			// Soft line break, possibly hard if preceded by two spaces (handled at

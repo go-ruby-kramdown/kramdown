@@ -13,23 +13,19 @@ package kramdown
 // should graduate out. Each bucket documents WHY it diverges.
 var corpusExceptions = map[string]bool{
 
-	// --- entityout (8): entity_output :numeric / :symbolic is now honoured for the
-	// typographic-symbol / smart-quote elements and the footnote back-link separator
-	// (so span/04_footnote/markers graduated). These remaining cases each additionally
-	// need a feature this port does not model: the full ~2000-entry named-entity table
+	// --- entityout (6): smart-quote direction now matches the gem (emphasis/normal and
+	// typography graduated via the parse-time smart_quotes port). These remaining cases
+	// each need a feature this port does not yet model: the full named-entity table
 	// (entities_numeric/symbolic re-encode &copy; etc.), a custom smart_quotes spec
-	// (entities_as_char), smart-quote direction fixes (emphasis/normal and typography
-	// diverge only on which curly quote opens after "(" / a nested quote / an escaped
-	// "\["), the {:footnotes} placement directive (placement), or footnote/header
-	// ordering (regexp_problem). entities stays on the :as_input bare-"&" escaping.
-	"span/02_emphasis/normal.text":                   true,
+	// (entities_as_char), the {:footnotes} placement directive (placement), or
+	// footnote/header ordering (regexp_problem). entities stays on the :as_input
+	// bare-"&" escaping.
 	"span/04_footnote/placement.text":                true,
 	"span/04_footnote/regexp_problem.text":           true,
 	"span/text_substitutions/entities.text":          true,
 	"span/text_substitutions/entities_as_char.text":  true,
 	"span/text_substitutions/entities_numeric.text":  true,
 	"span/text_substitutions/entities_symbolic.text": true,
-	"span/text_substitutions/typography.text":        true,
 
 	// --- highlight (2): Syntax highlighting cases this port cannot yet close by wiring the
 	// pure-Go go-ruby-rouge highlighter. rouge/simple mixes a Ruby, an HTML and a
