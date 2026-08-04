@@ -426,7 +426,13 @@ func (p *parser) makeSetextHeader(buf []string, underline string, parent *Elemen
 // begins its own value segment), so a list marker never needs to interrupt a
 // paragraph here.
 func (p *parser) startsNewBlock(lines []string, i int) bool {
-	return p.blockHTMLStart(lines, i)
+	// Only a block-level HTML start tag interrupts a running paragraph. A bare HTML
+	// comment on a continuation line is absorbed into the paragraph and parsed as
+	// span-level (kramdown emits it inside the <p>, e.g. a comment following a
+	// paragraph line inside a blockquote).
+	src := strings.Join(lines[i:], "\n") + "\n"
+	name, _, _, _, ok := matchStartTag(stripOptSpace(src))
+	return ok && !htmlSpanElements[strings.ToLower(name)]
 }
 
 // parseComment handles the {::comment}…{:/comment} extension, emitting an

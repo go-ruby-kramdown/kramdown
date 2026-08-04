@@ -38,14 +38,14 @@ func TestSpanOptionsExtension(t *testing.T) {
 	}
 }
 
-// TestSpanHTMLNoCloseFallthrough covers the fall-through when span-HTML parsing is
-// off but an opening element has no matching close tag: the port emits the opening
-// tag raw and keeps parsing the remainder (the idx < 0 branch). This is an
-// unterminated-tag edge case the gem instead auto-closes at the paragraph boundary
-// (keeping the body raw); it is not exercised by the corpus.
+// TestSpanHTMLNoCloseFallthrough covers parse_span_html's no-end-tag branch when
+// span-HTML parsing is off: the raw-content-model <span> body is parsed with only the
+// span-HTML parser active (so "*y*" stays literal), no close tag is found, and the
+// element is auto-closed at the paragraph boundary — kramdown emits it as
+// "<span>*y* end</span>". Verified byte-exact against kramdown 2.5.2.
 func TestSpanHTMLNoCloseFallthrough(t *testing.T) {
 	got := ToHTML(`x {::options parse_span_html="false" /} <span>*y* end`, nil)
-	want := "<p>x  <span><em>y</em> end</p>\n"
+	want := "<p>x  <span>*y* end</span></p>\n"
 	if got != want {
 		t.Errorf("unterminated raw span:\n got %q\nwant %q", got, want)
 	}

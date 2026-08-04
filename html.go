@@ -614,11 +614,33 @@ func (c *htmlConverter) renderSpan(e *Element, b *strings.Builder, indent int) {
 		}
 	case ElRawHTMLSpan:
 		b.WriteString(e.Value)
+	case ElHTMLElement:
+		c.renderSpanHTMLElement(e, b, indent)
+	case ElXMLComment, ElXMLPI:
+		// A span-category comment / processing instruction renders verbatim inline
+		// (convert_xml_comment's non-block branch).
+		b.WriteString(e.Value)
 	case ElAbbr:
 		c.renderAbbr(e, b)
 	case ElFootnoteRef:
 		c.renderFootnoteRef(e, b)
 	}
+}
+
+// renderSpanHTMLElement ports convert_html_element's span-category branch: a void
+// element with an empty body self-closes; every other element wraps its converted
+// children in a start/end tag pair. Attributes render with Utils::Html#html_attributes
+// (blank id dropped, values attribute-escaped).
+func (c *htmlConverter) renderSpanHTMLElement(e *Element, b *strings.Builder, indent int) {
+	var inner strings.Builder
+	c.renderSpanEls(e.Children, &inner, indent)
+	res := inner.String()
+	attrs := htmlAttributes(e.Attrs)
+	if res == "" && htmlElementsWithoutBody[e.Value] {
+		b.WriteString("<" + e.Value + attrs + " />")
+		return
+	}
+	b.WriteString("<" + e.Value + attrs + ">" + res + "</" + e.Value + ">")
 }
 
 // renderLink renders an <a>; autolinks escape their href differently (ampersands).

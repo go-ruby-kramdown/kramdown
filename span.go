@@ -24,11 +24,15 @@ type spanParser struct {
 	// current tree plus its ancestors), mirroring kramdown's @tree/@stack. It lets
 	// parse_emphasis refuse to nest an :em inside an :em (or :strong inside :strong).
 	stack []ElementType
-	// openHTML counts, per lower-cased tag name, the raw inline HTML start tags seen
-	// but not yet balanced by a close tag. A close tag with a matching open passes
-	// through verbatim; a stray close tag (no open) is escaped as text, mirroring
-	// parse_span_html's close-tag branch.
-	openHTML map[string]int
+	// htmlStopRE, when non-nil, is the close-tag regexp that terminates the current
+	// span-HTML element body (kramdown's parse_spans stop_re). When the loop reaches a
+	// "<" that begins this close tag it stops, leaving the tag for the caller to
+	// consume — exactly parse_span_html's body parse.
+	htmlStopRE *regexp.Regexp
+	// rawMode reports that the current recursion parses a raw-content-model span-HTML
+	// body (kramdown's parse_spans(..., [:span_html])): only nested span HTML is
+	// recognised and every other character is literal text.
+	rawMode bool
 }
 
 // parseSpans converts a block's raw text into span elements.
@@ -63,7 +67,26 @@ func (sp *spanParser) parseInto(stop *emphStop) bool {
 				return true
 			}
 		}
+		// A span-HTML element body stops at its close tag (kramdown's parse_spans
+		// stop_re). Leave sp.pos on the "<" so the caller consumes the close tag.
+		if sp.htmlStopRE != nil && sp.src[sp.pos] == '<' {
+			if loc := sp.htmlStopRE.FindStringIndex(sp.src[sp.pos:]); loc != nil && loc[0] == 0 {
+				flush()
+				return true
+			}
+		}
 		c := sp.src[sp.pos]
+		// A raw-content-model body (kramdown's [:span_html] restriction) recognises only
+		// nested span HTML; everything else — including backslashes, emphasis and code
+		// markers — is literal text.
+		if sp.rawMode {
+			if c == '<' && sp.trySpanHTML(&lit, flush) {
+				continue
+			}
+			lit.WriteByte(c)
+			sp.pos++
+			continue
+		}
 		switch c {
 		case '\\':
 			if sp.pos+1 < len(sp.src) && isEscapable(sp.src[sp.pos+1]) {
@@ -144,9 +167,12 @@ func (sp *spanParser) parseInto(stop *emphStop) bool {
 			doubled := (sp.pos > 0 && sp.src[sp.pos-1] == '<') ||
 				(sp.pos+1 < len(sp.src) && sp.src[sp.pos+1] == '<')
 			if !doubled {
-				if el, n := sp.tryAutolinkOrHTML(); el != nil {
+				if el, n := sp.tryAutolink(); el != nil {
 					flush()
 					sp.push(el, n)
+					continue
+				}
+				if sp.trySpanHTML(&lit, flush) {
 					continue
 				}
 			}
@@ -478,7 +504,13 @@ func (sp *spanParser) emphSubParse(contentPos int, delim string, elemType Elemen
 	sp.stack = append(sp.stack, elemType)
 	savedDst := sp.dst
 	sp.dst = &el.Children
+	// An emphasis body is a fresh parse_spans with its own stop_re: the enclosing
+	// span-HTML close tag and raw mode do not apply inside it (a "</span>" here is a
+	// stray close, not the container's terminator).
+	savedStop, savedRaw := sp.htmlStopRE, sp.rawMode
+	sp.htmlStopRE, sp.rawMode = nil, false
 	found := sp.parseInto(stop)
+	sp.htmlStopRE, sp.rawMode = savedStop, savedRaw
 	sp.dst = savedDst
 	sp.stack = sp.stack[:len(sp.stack)-1]
 	if found {

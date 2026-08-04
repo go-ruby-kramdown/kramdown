@@ -25,15 +25,10 @@ var knownFailing = map[string]bool{
 	"block/11_ial/simple.text": true,
 
 	// block/14_table (1)
-	// simple: one row uses an unclosed inline <em> HTML element that kramdown
-	// auto-closes at the cell boundary (span-HTML content model), rendering the
-	// stray "</em>" in the next cell as escaped text; out of scope until the span
-	// HTML front-end lands.
+	// simple: the span-HTML cell content now matches (the unclosed inline <em> is
+	// auto-closed at the cell boundary and the stray "</em>" is escaped). One
+	// divergence remains — a trailing block IAL under a table ("| … |\n{:.cls}") that
+	// kramdown attaches to the table; here it is emitted as a separate paragraph. That
+	// is a block-IAL/table interaction, out of scope for the span-HTML cluster.
 	"block/14_table/simple.text": true,
-
-	// encoding.text (1)
-	// One divergence remains — inline raw HTML attribute quote normalization inside a
-	// paragraph (<span id='x'> -> <span id="x">) — which needs the span-level HTML
-	// front-end (parse_span_html). The block-level markdown="1" reparse now matches.
-	"encoding.text": true,
 }

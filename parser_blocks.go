@@ -876,6 +876,13 @@ func (p *parser) tryDefinitionList(lines []string, start int) (*Element, int) {
 			dl.addChild(dd)
 			continue
 		}
+		// A line that begins another block (e.g. a block-level HTML element) is not a
+		// term: it terminates the definition list, which the block loop then resumes
+		// on. kramdown's term scan only accepts non-block lines, so a stray block line
+		// after a definition ends the <dl> rather than becoming a dangling term.
+		if p.startsNewBlock(lines, i) {
+			break
+		}
 		// Otherwise it is a term line (possibly multiple consecutive terms). A leading
 		// "{:…}" IAL on the term applies to the <dt>.
 		dt := newEl(ElDT)
