@@ -59,9 +59,18 @@ func renderSym(name, mode string) string {
 }
 
 // typoSym builds an ElTypographicSym element for the named entity, emitted by the
-// span parser for a dash / ellipsis / guillemet / smart-quote substitution.
+// span parser for a dash / ellipsis / guillemet substitution.
 func typoSym(name string) *Element {
 	e := newEl(ElTypographicSym)
+	e.Value = name
+	return e
+}
+
+// smartQuote builds an ElSmartQuote element for one of the four quote positions
+// (lsquo/rsquo/ldquo/rdquo), whose rendered entity is chosen by the :smart_quotes
+// option at conversion time.
+func smartQuote(name string) *Element {
+	e := newEl(ElSmartQuote)
 	e.Value = name
 	return e
 }

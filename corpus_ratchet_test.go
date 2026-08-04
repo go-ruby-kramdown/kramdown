@@ -91,7 +91,16 @@ func applyCorpusOptions(o Options, text string) Options {
 		case "html_to_native":
 			o.HtmlToNative = val == "true"
 		case "smart_quotes":
-			o.SmartQuotes = val != "false"
+			if val == "false" {
+				o.SmartQuotes = false
+			} else {
+				o.SmartQuotes = true
+				for i, name := range strings.Split(val, ",") {
+					if i < len(o.SmartQuotesSubst) {
+						o.SmartQuotesSubst[i] = strings.TrimSpace(name)
+					}
+				}
+			}
 		case "remove_line_breaks_for_cjk":
 			o.RemoveLineBreaksForCJK = val == "true"
 		case "entity_output":

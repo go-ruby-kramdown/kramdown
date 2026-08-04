@@ -141,7 +141,9 @@ func TestIndentedCodeThenText(t *testing.T) {
 }
 
 // TestRawHTMLSpanInText covers renderSpan's ElRawHTMLSpan branch and an entity span.
+// The named entity resolves to its character under the default :as_char mode, exactly
+// as kramdown 2.5.2 renders it.
 func TestRawHTMLAndEntitySpans(t *testing.T) {
 	eq(t, "x <em>y</em> z\n", "<p>x <em>y</em> z</p>\n")
-	eq(t, "&copy; 2026\n", "<p>&copy; 2026</p>\n")
+	eq(t, "&copy; 2026\n", "<p>© 2026</p>\n")
 }

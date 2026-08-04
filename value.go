@@ -94,6 +94,10 @@ const (
 	// ElTypographicSym carries a smart-typography substitution; Value is the entity
 	// name (e.g. "ldquo", "mdash").
 	ElTypographicSym
+	// ElSmartQuote is a smart-quote substitution; Value is one of "lsquo", "rsquo",
+	// "ldquo" or "rdquo" and is mapped through the :smart_quotes option at render time
+	// (kramdown's :smart_quote element / convert_smart_quote).
+	ElSmartQuote
 	// ElFootnoteRef is a footnote reference; Options["name"] is the id.
 	ElFootnoteRef
 	// ElAbbr is an expanded abbreviation; Value is the matched text and

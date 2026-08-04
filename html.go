@@ -33,6 +33,15 @@ func newHTMLConverter(doc *Document) *htmlConverter {
 	}
 }
 
+// entityOutput returns the effective entity_output mode, defaulting an unset value
+// to kramdown's own default (:as_char).
+func (c *htmlConverter) entityOutput() string {
+	if c.doc.Opts.EntityOutput == "" {
+		return "as_char"
+	}
+	return c.doc.Opts.EntityOutput
+}
+
 // convert renders the whole document, appending the collected footnotes.
 func (c *htmlConverter) convert() string {
 	var b strings.Builder
@@ -625,9 +634,7 @@ func (c *htmlConverter) parseSpansRender(raw string) []*Element {
 			convertHTMLToNative(e)
 		}
 	}
-	if c.doc.Opts.EntityOutput == "as_char" {
-		convertTextEntities(els)
-	}
+	applyEntityOutput(els, c.entityOutput())
 	return els
 }
 
@@ -680,8 +687,10 @@ func (c *htmlConverter) renderSpan(e *Element, b *strings.Builder, indent int) {
 		if sub, ok := c.doc.Opts.TypographicSymbols[e.Value]; ok {
 			b.WriteString(escapeHTMLText(sub))
 		} else {
-			b.WriteString(renderSym(e.Value, c.doc.Opts.EntityOutput))
+			b.WriteString(renderSym(e.Value, c.entityOutput()))
 		}
+	case ElSmartQuote:
+		b.WriteString(c.renderSmartQuote(e.Value))
 	case ElRawHTMLSpan:
 		b.WriteString(e.Value)
 	case ElHTMLElement:
@@ -695,6 +704,18 @@ func (c *htmlConverter) renderSpan(e *Element, b *strings.Builder, indent int) {
 	case ElFootnoteRef:
 		c.renderFootnoteRef(e, b)
 	}
+}
+
+// renderSmartQuote ports convert_smart_quote: the element's position (lsquo/rsquo/
+// ldquo/rdquo) selects an entity name through the :smart_quotes option array (a blank
+// override falling back to the default name), which is then rendered via entity_to_str.
+func (c *htmlConverter) renderSmartQuote(value string) string {
+	idx := smartQuoteIndex[value]
+	name := c.doc.Opts.SmartQuotesSubst[idx]
+	if name == "" {
+		name = defaultSmartQuotes[idx]
+	}
+	return entityToStr(entityNameToCP[name], name, "", c.entityOutput())
 }
 
 // renderSpanHTMLElement ports convert_html_element's span-category branch: a void

@@ -13,19 +13,12 @@ package kramdown
 // should graduate out. Each bucket documents WHY it diverges.
 var corpusExceptions = map[string]bool{
 
-	// --- entityout (6): smart-quote direction now matches the gem (emphasis/normal and
-	// typography graduated via the parse-time smart_quotes port). These remaining cases
-	// each need a feature this port does not yet model: the full named-entity table
-	// (entities_numeric/symbolic re-encode &copy; etc.), a custom smart_quotes spec
-	// (entities_as_char), the {:footnotes} placement directive (placement), or
-	// footnote/header ordering (regexp_problem). entities stays on the :as_input
-	// bare-"&" escaping.
-	"span/04_footnote/placement.text":                true,
-	"span/04_footnote/regexp_problem.text":           true,
-	"span/text_substitutions/entities.text":          true,
-	"span/text_substitutions/entities_as_char.text":  true,
-	"span/text_substitutions/entities_numeric.text":  true,
-	"span/text_substitutions/entities_symbolic.text": true,
+	// --- footnote (2): the {:footnotes} placement directive (render the footnote block
+	// at an explicit location instead of the end — placement) and the footnote/header
+	// ordering interaction (regexp_problem). Both depend on the footnote-location /
+	// header-numbering reworks that are out of scope for the entity-output cluster.
+	"span/04_footnote/placement.text":      true,
+	"span/04_footnote/regexp_problem.text": true,
 
 	// --- highlight (2): Syntax highlighting cases this port cannot yet close by wiring the
 	// pure-Go go-ruby-rouge highlighter. rouge/simple mixes a Ruby, an HTML and a

@@ -33,12 +33,18 @@ type Options struct {
 	// SmartQuotes enables typographic substitution of quotes/dashes/ellipses
 	// (kramdown's default).
 	SmartQuotes bool
+	// SmartQuotesSubst overrides the entity each smart-quote position maps to, in the
+	// order [lsquo, rsquo, ldquo, rdquo] (kramdown's :smart_quotes array). A blank
+	// entry falls back to that position's default name, so the zero value renders the
+	// usual curly quotes. Mirrors e.g. :smart_quotes: apos,apos,quot,quot.
+	SmartQuotesSubst [4]string
 	// Typographic enables the --, ---, ... and <<>> substitutions (default true).
 	Typographic bool
-	// EntityOutput selects how a recognised HTML entity in span text is rendered. The
-	// default "as_char" emits the entity's character (except <, > and & which keep
-	// their input form); "as_input" (and any other value this port does not model)
-	// leaves the entity in its literal input form. kramdown's default is :as_char.
+	// EntityOutput selects how a recognised HTML entity is rendered, mirroring
+	// kramdown's :entity_output: "as_char" (the default) emits the entity's character,
+	// except <, > and & which fall back to their named/numeric form; "as_input" keeps
+	// the entity's literal input form; "numeric" emits "&#cp;"; and "symbolic" emits
+	// "&name;" when the entity has a name, else "&#cp;". An empty value means as_char.
 	EntityOutput string
 	// HardWrap, when true, turns every soft newline into a <br />. Independent of
 	// this, a line ending in two spaces (or "\\") is always a hard break. kramdown's

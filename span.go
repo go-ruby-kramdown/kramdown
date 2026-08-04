@@ -265,7 +265,7 @@ func (sp *spanParser) parseInto(stop *emphStop) bool {
 				flush()
 				for _, it := range items {
 					if it.sym != "" {
-						*sp.dst = append(*sp.dst, typoSym(it.sym))
+						*sp.dst = append(*sp.dst, smartQuote(it.sym))
 					} else {
 						sp.emitLiteral(it.text)
 					}
@@ -443,11 +443,13 @@ func (sp *spanParser) emitLiteral(s string) {
 	*sp.dst = append(*sp.dst, t)
 }
 
-// isEscapable reports whether c may follow a backslash as a kramdown escape.
+// isEscapable reports whether c may follow a backslash as a kramdown escape. The set
+// is kramdown's ESCAPED_CHARS = /\\([\\.*_+`<>()\[\]{}#!:|"'$=-])/ exactly, so an
+// "&" (or any other character) after a backslash keeps the backslash literal.
 func isEscapable(c byte) bool {
 	switch c {
-	case '\\', '.', '*', '_', '+', '-', '`', '(', ')', '[', ']', '{', '}',
-		'#', '!', '<', '>', ':', '|', '"', '\'', '=', '~', '^', '&':
+	case '\\', '.', '*', '_', '+', '`', '<', '>', '(', ')', '[', ']', '{', '}',
+		'#', '!', ':', '|', '"', '\'', '$', '=', '-':
 		return true
 	}
 	return false
