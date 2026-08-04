@@ -14,9 +14,6 @@ package kramdown
 // Grouped by kramdown feature; each cluster is closed in its own PR.
 var knownFailing = map[string]bool{
 
-	// block/03_paragraph (1)
-	"block/03_paragraph/standalone_image.text": true,
-
 	// block/04_header (3)
 	"block/04_header/atx_header.text":             true,
 	"block/04_header/setext_header.text":          true,

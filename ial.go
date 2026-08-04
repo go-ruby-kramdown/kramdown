@@ -96,10 +96,13 @@ func parseIAL(raw string, alds map[string]string) []ialToken {
 			}
 			word := s[:j]
 			s = s[j:]
+			// Record the bare word as a reference (kramdown keeps every IAL ref in
+			// ial[:refs]); a matching ALD is additionally expanded in place, an unknown
+			// one contributes no attributes but is still remembered (e.g. "standalone").
+			toks = append(toks, ialToken{kind: "ref", val: word})
 			if def, ok := alds[word]; ok {
 				toks = append(toks, parseIAL(def, alds)...)
 			}
-			// else ignored (kramdown drops unknown bare words)
 		}
 	}
 	return toks
@@ -135,8 +138,23 @@ func applyIALToElement(el *Element, raw string, alds map[string]string) {
 			el.setAttr("id", t.val)
 		case "key":
 			el.setAttr(t.name, t.val)
+		case "ref":
+			refs, _ := el.Options["ial_refs"].([]string)
+			el.Options["ial_refs"] = append(refs, t.val)
 		}
 	}
+}
+
+// ialHasRef reports whether el's applied IAL recorded the given bare-word
+// reference (e.g. "standalone").
+func ialHasRef(el *Element, ref string) bool {
+	refs, _ := el.Options["ial_refs"].([]string)
+	for _, r := range refs {
+		if r == ref {
+			return true
+		}
+	}
+	return false
 }
 
 // htmlBlockTags is the set of block-level HTML tags whose opening line triggers a

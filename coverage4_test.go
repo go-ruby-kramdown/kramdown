@@ -55,3 +55,16 @@ func TestCoverIndentedCodeWithBlank(t *testing.T) {
 		t.Errorf("trailing blank not trimmed from code block: %q", got)
 	}
 }
+
+// TestCoverStandaloneImageNoAttrs renders a standalone image whose IAL carries
+// neither a class nor an id, driving the not-present return of takeAttr for both
+// attributes so the <figure> stays attribute-free (matching kramdown 2.5.2).
+func TestCoverStandaloneImageNoAttrs(t *testing.T) {
+	opts := DefaultOptions()
+	opts.AutoIds = false
+	got := ToHTML("![alt txt](pic.jpg){:standalone}", &opts)
+	want := "<figure>\n  <img src=\"pic.jpg\" alt=\"alt txt\" />\n  <figcaption>alt txt</figcaption>\n</figure>\n"
+	if got != want {
+		t.Errorf("standalone image without id/class:\n got %q\nwant %q", got, want)
+	}
+}
