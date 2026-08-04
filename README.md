@@ -9,7 +9,7 @@ Pure-Go (CGO=0), MRI-faithful reimplementation of the Ruby
 
 [![CI](https://github.com/go-ruby-kramdown/kramdown/actions/workflows/ci.yml/badge.svg)](https://github.com/go-ruby-kramdown/kramdown/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](https://github.com/go-ruby-kramdown/kramdown/actions/workflows/ci.yml)
-[![Conformance](https://img.shields.io/badge/conformance-196%2F198%20(98.99%25)-1a7f37)](#conformance--testing)
+[![Conformance](https://img.shields.io/badge/conformance-197%2F198%20(99.49%25)-1a7f37)](#conformance--testing)
 [![Go Reference](https://pkg.go.dev/badge/github.com/go-ruby-kramdown/kramdown.svg)](https://pkg.go.dev/github.com/go-ruby-kramdown/kramdown)
 [![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD--3--Clause-blue.svg)](LICENSE)
 
@@ -18,10 +18,10 @@ Pure-Go (CGO=0), MRI-faithful reimplementation of the Ruby
 ## About
 
 `go-ruby-kramdown` renders the [kramdown](https://kramdown.gettalong.org/syntax.html)
-dialect of Markdown to HTML. Across the shared kramdown test corpus, **196 of 198
-cases (98.99%) render byte-exact against the Ruby `kramdown` 2.5.2 gem** — see
+dialect of Markdown to HTML. Across the shared kramdown test corpus, **197 of 198
+cases (99.49%) render byte-exact against the Ruby `kramdown` 2.5.2 gem** — see
 [Conformance & testing](#conformance--testing) for the measured number and the
-short list of what is not yet supported. It is a member of the [go-ruby-*](https://github.com/go-embedded-ruby)
+single remaining case. It is a member of the [go-ruby-*](https://github.com/go-embedded-ruby)
 family of pure-Go Ruby modules that [go-embedded-ruby](https://github.com/go-embedded-ruby)
 (`rbgo`) binds as native modules — there is **no cgo and no external process**: the
 converter is a self-contained Go package that cross-compiles to every Go target.
@@ -95,7 +95,7 @@ Edge cases deliberately outside the common feature set are documented in the tes
 ## Conformance & testing
 
 A differential oracle compares output to the real `kramdown` gem where it is
-installed. Against the shared kramdown test corpus, **196 of 198 cases (98.99%)
+installed. Against the shared kramdown test corpus, **197 of 198 cases (99.49%)
 render byte-for-byte identically to the Ruby `kramdown` 2.5.2 gem**. A shrink-only
 ratchet locks this in: a case outside the known-failing ledger that stops matching
 fails CI, and a ledgered case that starts matching must be graduated out. The
@@ -104,23 +104,31 @@ no-ruby, Windows, and qemu CI lanes stay green. The package is verified on
 Linux/macOS/Windows and cross-tested on `amd64`, `arm64`, `riscv64`, `loong64`,
 `ppc64le`, and `s390x`.
 
-### Not yet supported (the remaining 2 corpus cases)
+### Not yet supported (the remaining 1 corpus case)
 
-`go-ruby-kramdown` is **not** spec-complete. The two cases that do not yet match
-the gem both depend on a Ruby-runtime library the pure-Go port cannot supply:
+`go-ruby-kramdown` is **not** spec-complete, but the single case that does not
+match the gem is a test-harness artifact, not a library feature:
 
-- **Rouge syntax-highlighted code blocks** (2 cases) — the common Rouge paths are
-  wired through the pure-Go highlighter, but `rouge/simple` needs a PHP lexer (not
-  yet shipped) and `rouge/multiple` selects a bespoke formatter defined inside
-  kramdown's own Ruby test harness, which no pure-Go wiring can supply.
+- **`rouge/multiple`** — this case sets `formatter: RougeHTMLFormatters` in its
+  options, naming a custom Rouge formatter subclass defined *only inside kramdown's
+  own Ruby test harness* (kramdown 2.5.2 `test/test_files.rb`), whose `#stream`
+  wraps every block in an extra `<div class="custom-class">`. It is not a kramdown
+  library feature — the options file references an arbitrary Ruby class that the
+  gem's own test process happens to have loaded — so no pure-Go wiring can resolve
+  or run it. The three code blocks it contains (two Ruby, one PHP) already tokenise
+  byte-for-byte; only the harness-injected wrapper div is unreachable.
 
 ### Already done
 
-The port covers a large body of kramdown behaviour, including a full port of
-kramdown's `Parser::Html` raw-HTML front-end and `html_to_native` conversion,
-table-of-contents generation, the HTML named-entity table, footnotes with
-back-links and ordering, smart quotes and typographic substitutions, header
-options with auto-ids and transliterated IDs, and CJK line-break handling.
+The port covers essentially all of kramdown's rendered behaviour, including: a full
+port of kramdown's `Parser::Html` raw-HTML front-end and `html_to_native`
+conversion; table-of-contents generation; the complete 905-entry HTML named-entity
+table; footnotes with back-links and ordering; smart quotes and typographic
+substitutions; header options with auto-ids, transliterated IDs, and CJK
+line-break handling; LaTeX **math** (`$$…$$` block/span, MathJax-wrapped by
+default); Inline Attribute Lists / Attribute List Definitions (IAL/ALD); and
+**Rouge** syntax highlighting via the pure-Go [go-ruby-rouge](https://github.com/go-ruby-rouge/rouge)
+lexers — including the PHP lexer that closed `rouge/simple`.
 
 ## License
 
