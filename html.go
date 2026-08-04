@@ -245,18 +245,17 @@ func outputHeaderLevel(level, offset int) int {
 
 var reIdStrip = regexp.MustCompile(`[^a-zA-Z0-9 -]`)
 var reIdLead = regexp.MustCompile(`^[^a-zA-Z]+`)
-var reIdSpace = regexp.MustCompile(`\s+`)
 
 // generateId derives a header id from its raw text the way kramdown's auto_ids do,
 // de-duplicating with a "-N" suffix.
 func (c *htmlConverter) generateId(raw string) string {
-	// Render to plain text (markup stripped), then slug.
+	// Render to plain text (markup stripped), optionally transliterate to ASCII, then
+	// slug it with kramdown's basic_generate_id rules.
 	plain := plainText(c.doc.parseSpansFor(raw))
-	s := reIdStrip.ReplaceAllString(plain, "")
-	s = strings.TrimSpace(s)
-	s = reIdLead.ReplaceAllString(s, "")
-	s = strings.ToLower(s)
-	s = reIdSpace.ReplaceAllString(s, "-")
+	if c.doc.Opts.TransliteratedHeaderIds {
+		plain = transliterate(plain)
+	}
+	s := basicGenerateID(plain)
 	if s == "" {
 		s = "section"
 	}

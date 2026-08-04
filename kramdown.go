@@ -21,6 +21,11 @@ type Options struct {
 	// every header that carries a non-blank id. Mirrors kramdown's :header_links
 	// option (default false).
 	HeaderLinks bool
+	// TransliteratedHeaderIds, when true, transliterates a header's text to ASCII
+	// (via the vendored Stringex unidecoder table) before slugging it into an
+	// auto-generated id. Mirrors kramdown's :transliterated_header_ids option
+	// (default false).
+	TransliteratedHeaderIds bool
 	// SmartQuotes enables typographic substitution of quotes/dashes/ellipses
 	// (kramdown's default).
 	SmartQuotes bool

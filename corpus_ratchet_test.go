@@ -76,6 +76,8 @@ func applyCorpusOptions(o Options, text string) Options {
 			}
 		case "header_links":
 			o.HeaderLinks = val == "true"
+		case "transliterated_header_ids":
+			o.TransliteratedHeaderIds = val == "true"
 		case "footnote_nr":
 			if n, err := strconv.Atoi(val); err == nil {
 				o.FootnoteNr = n
