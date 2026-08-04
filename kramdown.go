@@ -50,6 +50,14 @@ type Options struct {
 	// element keeps its content verbatim. When false (kramdown's default) every block
 	// HTML element uses the raw content model. Mirrors kramdown's :parse_block_html.
 	ParseBlockHTML bool
+	// HtmlToNative, when true, runs kramdown's Parser::Html::ElementConverter over
+	// every parsed raw-HTML element, mapping it to the equivalent native element where
+	// possible (<b>/<strong> -> :strong, <i>/<em> -> :em, <h1>.. -> :header,
+	// <code>/<pre> -> :codespan/:codeblock, a simple <table> -> :table, and the
+	// list/paragraph/blockquote containers), converting entities in their text and
+	// applying kramdown's whitespace normalisation. When false (the default) parsed
+	// HTML elements are serialised verbatim. Mirrors kramdown's :html_to_native.
+	HtmlToNative bool
 	// SyntaxHighlighter selects the code highlighter. "rouge" (kramdown's default)
 	// routes code blocks/spans through the pure-Go go-ruby-rouge lexers; any other
 	// value ("", "null", "minted", …) leaves them as plain <pre><code>.
