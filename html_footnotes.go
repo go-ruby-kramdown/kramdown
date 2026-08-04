@@ -79,9 +79,11 @@ func (c *htmlConverter) renderFootnoteBody(def *Element, id string, b *strings.B
 		inner.WriteString(insertBacklinkBeforeClose(bodyB.String(), backlink))
 	default:
 		// No paragraph/header target: the back-link goes in its own trailing
-		// paragraph, without the leading NBSP.
+		// paragraph, without the leading NBSP separator (which takes the entity_output
+		// form, so strip that exact rendering).
+		sep := entityOut("nbsp", 0x00A0, c.doc.Opts.EntityOutput)
 		inner.WriteString(bodyB.String())
-		inner.WriteString(ind(3) + "<p>" + strings.TrimPrefix(backlink, " ") + "</p>\n")
+		inner.WriteString(ind(3) + "<p>" + strings.TrimPrefix(backlink, sep) + "</p>\n")
 	}
 	b.WriteString(inner.String())
 }
@@ -133,7 +135,9 @@ func (c *htmlConverter) backlinks(id string) string {
 		if i > 1 {
 			fnref = "fnref:" + name + ":" + strconv.Itoa(i-1)
 		}
-		b.WriteString(" ") // kramdown separates back-links with a real NBSP
+		// kramdown separates back-links with a non-breaking space, rendered per the
+		// entity_output mode (the U+00A0 character by default).
+		b.WriteString(entityOut("nbsp", 0x00A0, c.doc.Opts.EntityOutput))
 		if i == 1 {
 			fmt.Fprintf(&b, `<a href="#%s" class="reversefootnote" role="doc-backlink">%s</a>`, fnref, text)
 		} else {

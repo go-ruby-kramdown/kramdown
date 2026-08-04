@@ -13,12 +13,16 @@ package kramdown
 // should graduate out. Each bucket documents WHY it diverges.
 var corpusExceptions = map[string]bool{
 
-	// --- entityout (9): entity_output modes (:numeric / :symbolic / :as_input / :as_char) plus custom
-	// smart_quotes specs. The gem re-encodes every character entity according to a
-	// runtime table of ~2000 named HTML entities; this port emits the default
-	// as-char/named form only.
+	// --- entityout (8): entity_output :numeric / :symbolic is now honoured for the
+	// typographic-symbol / smart-quote elements and the footnote back-link separator
+	// (so span/04_footnote/markers graduated). These remaining cases each additionally
+	// need a feature this port does not model: the full ~2000-entry named-entity table
+	// (entities_numeric/symbolic re-encode &copy; etc.), a custom smart_quotes spec
+	// (entities_as_char), smart-quote direction fixes (emphasis/normal and typography
+	// diverge only on which curly quote opens after "(" / a nested quote / an escaped
+	// "\["), the {:footnotes} placement directive (placement), or footnote/header
+	// ordering (regexp_problem). entities stays on the :as_input bare-"&" escaping.
 	"span/02_emphasis/normal.text":                   true,
-	"span/04_footnote/markers.text":                  true,
 	"span/04_footnote/placement.text":                true,
 	"span/04_footnote/regexp_problem.text":           true,
 	"span/text_substitutions/entities.text":          true,

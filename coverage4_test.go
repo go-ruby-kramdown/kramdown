@@ -29,9 +29,9 @@ func TestCoverDefGroupFollows(t *testing.T) {
 // rendering corpus does not reach on its own (unknown symbol name, empty-string
 // guards, the splitSub pre-sym short-circuit, and a fully-consumed IAL).
 func TestCoverDefensiveBranches(t *testing.T) {
-	// symChar fallthrough for an unknown entity name -> "".
-	if got := symChar("definitely-not-a-symbol"); got != "" {
-		t.Errorf("symChar(unknown) = %q, want empty", got)
+	// renderSym for an unknown symbol name -> "" (no symParts entry).
+	if got := renderSym("definitely-not-a-symbol", "as_char"); got != "" {
+		t.Errorf("renderSym(unknown) = %q, want empty", got)
 	}
 
 	// lastRune of the empty string -> "".
