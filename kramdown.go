@@ -74,6 +74,11 @@ type Options struct {
 	// :link_defs): a reference id maps to a URL and an optional title, resolvable by
 	// "[text][id]" / "[id]" the same as a definition harvested from the source.
 	LinkDefs map[string]LinkDef
+	// RemoveLineBreaksForCJK, when true, elides a soft line break that sits between
+	// two runs of East-Asian (Han/Hiragana/Katakana) characters, so source wrapped
+	// one CJK "word" per line renders as unbroken text. Mirrors kramdown's
+	// :remove_line_breaks_for_cjk option (default false).
+	RemoveLineBreaksForCJK bool
 	// TypographicSymbols overrides the replacement string kramdown emits for a named
 	// typographic symbol (hellip, mdash, ndash, laquo, raquo, laquo_space,
 	// raquo_space, lsquo, rsquo, ldquo, rdquo). A present entry is HTML-escaped and

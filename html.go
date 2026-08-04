@@ -612,7 +612,11 @@ func (c *htmlConverter) renderSpanEls(els []*Element, b *strings.Builder, indent
 func (c *htmlConverter) renderSpan(e *Element, b *strings.Builder, indent int) {
 	switch e.Type {
 	case ElText:
-		b.WriteString(escapeHTMLText(e.Value))
+		txt := escapeHTMLText(e.Value)
+		if c.doc.Opts.RemoveLineBreaksForCJK {
+			txt = fixCJKLineBreak(txt)
+		}
+		b.WriteString(txt)
 	case ElEm:
 		b.WriteString("<em" + c.attrStr(e) + ">")
 		c.renderSpanEls(e.Children, b, indent)

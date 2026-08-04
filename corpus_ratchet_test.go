@@ -82,6 +82,8 @@ func applyCorpusOptions(o Options, text string) Options {
 			o.HtmlToNative = val == "true"
 		case "smart_quotes":
 			o.SmartQuotes = val != "false"
+		case "remove_line_breaks_for_cjk":
+			o.RemoveLineBreaksForCJK = val == "true"
 		case "entity_output":
 			o.EntityOutput = strings.TrimPrefix(val, ":")
 		case "footnote_prefix":

@@ -65,10 +65,6 @@ var corpusExceptions = map[string]bool{
 	"block/04_header/header_type_offset.text": true,
 	"block/04_header/with_header_links.text":  true,
 
-	// --- cjk (1): remove_line_breaks_for_cjk — Unicode East-Asian-width line-break elision, a
-	// locale/runtime behaviour.
-	"cjk-line-break.text": true,
-
 	// --- translit (1): transliterated_header_ids — auto-ids built from Unicode-to-ASCII
 	// transliteration (the gem's stringex-style table).
 	"block/04_header/with_auto_ids.text": true,
