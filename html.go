@@ -219,8 +219,28 @@ func (c *htmlConverter) convertHeader(e *Element, b *strings.Builder, indent int
 			e.setAttr("id", c.doc.Opts.AutoIdPrefix+id)
 		}
 	}
-	tag := "h" + strconv.Itoa(level)
+	// header_links prepends an empty self-anchor to a header carrying a non-blank id
+	// (kramdown unshifts an <a href="#id"> element before the header's content).
+	if c.doc.Opts.HeaderLinks {
+		if id, ok := e.getAttr("id"); ok && id != "" {
+			inner = `<a href="` + escapeHTMLAttr("#"+id) + `"></a>` + inner
+		}
+	}
+	tag := "h" + strconv.Itoa(outputHeaderLevel(level, c.doc.Opts.HeaderOffset))
 	b.WriteString(ind(indent) + "<" + tag + c.attrStr(e) + ">" + inner + "</" + tag + ">\n")
+}
+
+// outputHeaderLevel ports base.rb's output_header_level: the source level shifted by
+// header_offset and clamped into the legal 1..6 range.
+func outputHeaderLevel(level, offset int) int {
+	l := level + offset
+	if l > 6 {
+		l = 6
+	}
+	if l < 1 {
+		l = 1
+	}
+	return l
 }
 
 var reIdStrip = regexp.MustCompile(`[^a-zA-Z0-9 -]`)
@@ -528,10 +548,14 @@ func hasBlankSep(els []*Element) bool {
 	return false
 }
 
-// attrStr renders an element's HTML attributes in emission order.
+// attrStr renders an element's HTML attributes in emission order, dropping a blank
+// id exactly as kramdown's Utils::Html#html_attributes does.
 func (c *htmlConverter) attrStr(e *Element) string {
 	var b strings.Builder
 	for _, a := range e.Attrs {
+		if a.Name == "id" && strings.TrimSpace(a.Val) == "" {
+			continue
+		}
 		b.WriteString(" " + a.Name + `="` + escapeHTMLAttr(a.Val) + `"`)
 	}
 	return b.String()

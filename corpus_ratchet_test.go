@@ -70,6 +70,12 @@ func applyCorpusOptions(o Options, text string) Options {
 			o.AutoIds = val == "true"
 		case "auto_id_prefix":
 			o.AutoIdPrefix = val
+		case "header_offset":
+			if n, err := strconv.Atoi(val); err == nil {
+				o.HeaderOffset = n
+			}
+		case "header_links":
+			o.HeaderLinks = val == "true"
 		case "footnote_nr":
 			if n, err := strconv.Atoi(val); err == nil {
 				o.FootnoteNr = n
