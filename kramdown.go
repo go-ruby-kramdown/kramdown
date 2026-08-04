@@ -41,6 +41,12 @@ type Options struct {
 	// SyntaxHighlighterOpts carries the highlighter's sub-options (default_lang,
 	// guess_lang, and the block:/span: disable flags).
 	SyntaxHighlighterOpts SyntaxHighlighterOpts
+	// TypographicSymbols overrides the replacement string kramdown emits for a named
+	// typographic symbol (hellip, mdash, ndash, laquo, raquo, laquo_space,
+	// raquo_space, lsquo, rsquo, ldquo, rdquo). A present entry is HTML-escaped and
+	// emitted verbatim in place of the default entity; an absent key keeps the
+	// default. Mirrors kramdown's :typographic_symbols option (default nil).
+	TypographicSymbols map[string]string
 }
 
 // DefaultOptions returns the option set matching kramdown's own defaults, used
