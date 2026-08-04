@@ -302,9 +302,56 @@ func (c *htmlConverter) convertCodeblock(e *Element, b *strings.Builder, indent 
 	if lang != "" {
 		codeAttr = ` class="language-` + escapeHTMLAttr(lang) + `"`
 	}
+	body := escapeHTMLText(e.Value)
+	// The show-whitespaces class turns every space/tab into a marked <span>, so the
+	// whitespace is visible; kramdown chomps the trailing newline, rewrites the runs,
+	// then re-appends the newline (convert_codeblock).
+	if cls, ok := e.getAttr("class"); ok && reShowWhitespaces.MatchString(cls) {
+		body = showWhitespaces(strings.TrimSuffix(body, "\n")) + "\n"
+	}
 	b.WriteString(pad + "<pre" + preAttr + "><code" + codeAttr + ">")
-	b.WriteString(escapeHTMLText(e.Value))
+	b.WriteString(body)
 	b.WriteString("</code></pre>\n")
+}
+
+// reShowWhitespaces matches kramdown's `\bshow-whitespaces\b` class test.
+var reShowWhitespaces = regexp.MustCompile(`\bshow-whitespaces\b`)
+
+// showWhitespaces reproduces convert_codeblock's show-whitespaces rewrite: each
+// maximal run of spaces/tabs is wrapped span-by-span, tagged -l when the run begins a
+// line, -r when it ends a line, and unsuffixed in between (leading takes precedence for
+// a run that spans a whole otherwise-empty segment, matching the gem's alternation
+// order). A space becomes the &#8901; bullet; a tab is kept literally.
+func showWhitespaces(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		c := s[i]
+		if c != ' ' && c != '\t' {
+			b.WriteByte(c)
+			i++
+			continue
+		}
+		j := i
+		for j < len(s) && (s[j] == ' ' || s[j] == '\t') {
+			j++
+		}
+		suffix := ""
+		switch {
+		case i == 0 || s[i-1] == '\n':
+			suffix = "-l"
+		case j == len(s) || s[j] == '\n':
+			suffix = "-r"
+		}
+		for k := i; k < j; k++ {
+			if s[k] == '\t' {
+				b.WriteString(`<span class="ws-tab` + suffix + `">` + "\t" + `</span>`)
+			} else {
+				b.WriteString(`<span class="ws-space` + suffix + `">&#8901;</span>`)
+			}
+		}
+		i = j
+	}
+	return b.String()
 }
 
 // codeblockPreAttr renders a code block's <pre> attributes. When the language was
