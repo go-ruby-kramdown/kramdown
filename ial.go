@@ -57,10 +57,13 @@ type ialToken struct {
 // reIALKey matches a key="value" or key='value' pair.
 var reIALKey = regexp.MustCompile(`^([\w:-]+)=("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')`)
 
-// parseIAL tokenises a raw attribute-list string into ordered tokens, resolving
-// ALD references against the supplied table. The token order mirrors kramdown's
-// (later classes/ids/keys override earlier; classes accumulate).
-func parseIAL(raw string, alds map[string]string) []ialToken {
+// parseIAL tokenises a raw attribute-list string into ordered tokens. Bare words
+// become "ref" tokens; ALD references are NOT expanded here — expansion is done by
+// applyIALToElement, which mirrors kramdown's update_attr_with_ial by resolving all
+// referenced ALDs first (so their attributes precede the IAL's own). The alds
+// parameter is unused and kept only for call-site compatibility. The token order
+// mirrors kramdown's (later classes/ids/keys override earlier; classes accumulate).
+func parseIAL(raw string, _ map[string]string) []ialToken {
 	var toks []ialToken
 	s := strings.TrimSpace(raw)
 	for {
@@ -89,20 +92,15 @@ func parseIAL(raw string, alds map[string]string) []ialToken {
 				s = s[len(m[0]):]
 				continue
 			}
-			// Bare word: an ALD reference if known, else ignored.
+			// Bare word: an ALD reference (kramdown keeps every IAL ref in ial[:refs]);
+			// an unknown one contributes no attributes but is still remembered (e.g.
+			// "standalone", "toc", "footnotes").
 			j := 0
 			for j < len(s) && !isIALSpace(s[j]) {
 				j++
 			}
-			word := s[:j]
+			toks = append(toks, ialToken{kind: "ref", val: s[:j]})
 			s = s[j:]
-			// Record the bare word as a reference (kramdown keeps every IAL ref in
-			// ial[:refs]); a matching ALD is additionally expanded in place, an unknown
-			// one contributes no attributes but is still remembered (e.g. "standalone").
-			toks = append(toks, ialToken{kind: "ref", val: word})
-			if def, ok := alds[word]; ok {
-				toks = append(toks, parseIAL(def, alds)...)
-			}
 		}
 	}
 	return toks
@@ -122,11 +120,42 @@ func unquoteIAL(s string) string {
 }
 
 // applyIALToElement applies a raw IAL string to el's HTML attributes in kramdown's
-// order: each attribute keeps the position of its first appearance in the IAL (or
-// its pre-existing position on the element), a class accumulates space-separated
-// values, and an id or key takes its last value.
+// order (parser/kramdown.rb#update_attr_with_ial): every referenced ALD is resolved
+// FIRST — recursively and in reference order, so its attributes precede the IAL's
+// own — then the IAL's literal attributes are applied. Each attribute keeps the
+// position of its first appearance (on the element or across the resolution), a
+// class accumulates space-separated values, and an id or key takes its last value.
+// The element's own bare-word references are recorded in Options["ial_refs"] (used
+// by the toc/footnotes/standalone/auto_ids features).
 func applyIALToElement(el *Element, raw string, alds map[string]string) {
-	for _, t := range parseIAL(raw, alds) {
+	toks := parseIAL(raw, nil)
+	// Record this element's own (top-level) references only.
+	for _, t := range toks {
+		if t.kind == "ref" {
+			refs, _ := el.Options["ial_refs"].([]string)
+			el.Options["ial_refs"] = append(refs, t.val)
+		}
+	}
+	applyIALTokens(el, toks, alds, map[string]bool{})
+}
+
+// applyIALTokens folds the tokens of one IAL (or a referenced ALD) into el,
+// resolving referenced ALDs before the token list's own attributes. active guards
+// against a cyclic ALD reference (kramdown has no such guard and would recurse
+// forever); acyclic references — the only kind in practice — apply exactly as the
+// gem does.
+func applyIALTokens(el *Element, toks []ialToken, alds map[string]string, active map[string]bool) {
+	for _, t := range toks {
+		if t.kind != "ref" {
+			continue
+		}
+		if def, ok := alds[t.val]; ok && !active[t.val] {
+			active[t.val] = true
+			applyIALTokens(el, parseIAL(def, nil), alds, active)
+			delete(active, t.val)
+		}
+	}
+	for _, t := range toks {
 		switch t.kind {
 		case "class":
 			if existing, ok := el.getAttr("class"); ok {
@@ -138,9 +167,6 @@ func applyIALToElement(el *Element, raw string, alds map[string]string) {
 			el.setAttr("id", t.val)
 		case "key":
 			el.setAttr(t.name, t.val)
-		case "ref":
-			refs, _ := el.Options["ial_refs"].([]string)
-			el.Options["ial_refs"] = append(refs, t.val)
 		}
 	}
 }

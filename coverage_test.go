@@ -174,13 +174,28 @@ func TestBlockquoteEdges(t *testing.T) {
 // TestStandaloneIALLeadingNoBlock covers applyStandaloneIAL when a leading IAL has
 // no following block (end of input).
 func TestStandaloneIALEdges(t *testing.T) {
-	// A trailing leading-IAL with nothing after it renders nothing.
+	// A leading IAL with nothing after it renders nothing (no block to decorate).
 	if got := h("{:.x}\n"); got != "" {
 		t.Errorf("dangling leading ial = %q", got)
 	}
-	// A leading IAL followed only by blank lines then EOF.
-	if got := h("{:.x}\n\n"); got != "" {
-		t.Errorf("leading ial blanks = %q", got)
+	// A leading IAL followed by a blank line: kramdown's intervening :blank consumes
+	// the pending block IAL (@block_ial) and renders a lone newline, matching the gem.
+	if got := h("{:.x}\n\n"); got != "\n" {
+		t.Errorf("leading ial blanks = %q, want %q", got, "\n")
+	}
+	// A leading IAL then a blank then a paragraph: the blank consumes the IAL, so the
+	// paragraph is undecorated (byte-exact with kramdown 2.5.2).
+	if got := h("{:.x}\n\npara\n"); got != "\n<p>para</p>\n" {
+		t.Errorf("leading ial then blank then para = %q", got)
+	}
+	// Consecutive leading IALs (no blank between) accumulate onto the following block.
+	if got := h("{:.x}\n{:.y}\npara\n"); got != "<p class=\"x y\">para</p>\n" {
+		t.Errorf("consecutive leading ials = %q", got)
+	}
+	// An ALD definition interrupting a leading-IAL run: its eob consumes the pending
+	// block IAL, so the following paragraph is undecorated (matches the gem).
+	if got := h("{:.x}\n{:foo: bar}\npara\n"); got != "<p>para</p>\n" {
+		t.Errorf("ald interrupts leading ial run = %q", got)
 	}
 }
 

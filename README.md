@@ -9,7 +9,7 @@ Pure-Go (CGO=0), MRI-faithful reimplementation of the Ruby
 
 [![CI](https://github.com/go-ruby-kramdown/kramdown/actions/workflows/ci.yml/badge.svg)](https://github.com/go-ruby-kramdown/kramdown/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](https://github.com/go-ruby-kramdown/kramdown/actions/workflows/ci.yml)
-[![Conformance](https://img.shields.io/badge/conformance-190%2F198%20(95.96%25)-1a7f37)](#conformance--testing)
+[![Conformance](https://img.shields.io/badge/conformance-196%2F198%20(98.99%25)-1a7f37)](#conformance--testing)
 [![Go Reference](https://pkg.go.dev/badge/github.com/go-ruby-kramdown/kramdown.svg)](https://pkg.go.dev/github.com/go-ruby-kramdown/kramdown)
 [![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD--3--Clause-blue.svg)](LICENSE)
 
@@ -18,8 +18,8 @@ Pure-Go (CGO=0), MRI-faithful reimplementation of the Ruby
 ## About
 
 `go-ruby-kramdown` renders the [kramdown](https://kramdown.gettalong.org/syntax.html)
-dialect of Markdown to HTML. Across the shared kramdown test corpus, **190 of 198
-cases (95.96%) render byte-exact against the Ruby `kramdown` 2.5.2 gem** — see
+dialect of Markdown to HTML. Across the shared kramdown test corpus, **196 of 198
+cases (98.99%) render byte-exact against the Ruby `kramdown` 2.5.2 gem** — see
 [Conformance & testing](#conformance--testing) for the measured number and the
 short list of what is not yet supported. It is a member of the [go-ruby-*](https://github.com/go-embedded-ruby)
 family of pure-Go Ruby modules that [go-embedded-ruby](https://github.com/go-embedded-ruby)
@@ -95,7 +95,7 @@ Edge cases deliberately outside the common feature set are documented in the tes
 ## Conformance & testing
 
 A differential oracle compares output to the real `kramdown` gem where it is
-installed. Against the shared kramdown test corpus, **190 of 198 cases (95.96%)
+installed. Against the shared kramdown test corpus, **196 of 198 cases (98.99%)
 render byte-for-byte identically to the Ruby `kramdown` 2.5.2 gem**. A shrink-only
 ratchet locks this in: a case outside the known-failing ledger that stops matching
 fails CI, and a ledgered case that starts matching must be graduated out. The
@@ -104,21 +104,15 @@ no-ruby, Windows, and qemu CI lanes stay green. The package is verified on
 Linux/macOS/Windows and cross-tested on `amd64`, `arm64`, `riscv64`, `loong64`,
 `ppc64le`, and `s390x`.
 
-### Not yet supported (the remaining 8 corpus cases)
+### Not yet supported (the remaining 2 corpus cases)
 
-`go-ruby-kramdown` is **not** spec-complete. The eight cases that do not yet match
-the gem are:
+`go-ruby-kramdown` is **not** spec-complete. The two cases that do not yet match
+the gem both depend on a Ruby-runtime library the pure-Go port cannot supply:
 
-- **LaTeX math** (4 cases) — block and span math beyond single-line MathJax
-  `\[…\]` / `\(…\)` wrapping needs a real math engine (itex2mml / KaTeX) or the
-  `:math_engine ~` fallback markup, which this pure-Go, no-Ruby port does not embed.
 - **Rouge syntax-highlighted code blocks** (2 cases) — the common Rouge paths are
   wired through the pure-Go highlighter, but `rouge/simple` needs a PHP lexer (not
   yet shipped) and `rouge/multiple` selects a bespoke formatter defined inside
   kramdown's own Ruby test harness, which no pure-Go wiring can supply.
-- **2 advanced IAL / attribute-list cases** — a trailing block IAL that kramdown
-  attaches to a preceding table, and deferred nested ALD-reference resolution with
-  kramdown's `update_attr_with_ial` accumulation ordering.
 
 ### Already done
 
