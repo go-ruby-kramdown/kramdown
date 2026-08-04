@@ -354,22 +354,3 @@ func (sp *spanParser) tryAutolink() (*Element, int) {
 	}
 	return nil, 0
 }
-
-// plainText renders span elements to their plain-text (alt) form, used for image
-// alt attributes and abbreviation scanning.
-func plainText(els []*Element) string {
-	var b strings.Builder
-	for _, e := range els {
-		switch e.Type {
-		case ElText, ElCodespan:
-			b.WriteString(e.Value)
-		case ElFootnoteRef:
-			if name, ok := e.Options["name"].(string); ok {
-				b.WriteString(name)
-			}
-		default:
-			b.WriteString(plainText(e.Children))
-		}
-	}
-	return b.String()
-}

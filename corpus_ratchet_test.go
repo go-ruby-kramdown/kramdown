@@ -70,6 +70,8 @@ func applyCorpusOptions(o Options, text string) Options {
 			o.AutoIds = val == "true"
 		case "auto_id_prefix":
 			o.AutoIdPrefix = val
+		case "auto_id_stripping":
+			o.AutoIdStripping = val == "true"
 		case "header_offset":
 			if n, err := strconv.Atoi(val); err == nil {
 				o.HeaderOffset = n

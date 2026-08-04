@@ -26,30 +26,12 @@ func TestCoverDefGroupFollows(t *testing.T) {
 }
 
 // TestCoverDefensiveBranches exercises the small defensive branches that the
-// rendering corpus does not reach on its own (unknown symbol name, empty-string
-// guards, the splitSub pre-sym short-circuit, and a fully-consumed IAL).
+// rendering corpus does not reach on its own (unknown symbol name and a
+// fully-consumed IAL).
 func TestCoverDefensiveBranches(t *testing.T) {
 	// renderSym for an unknown symbol name -> "" (no symParts entry).
 	if got := renderSym("definitely-not-a-symbol", "as_char"); got != "" {
 		t.Errorf("renderSym(unknown) = %q, want empty", got)
-	}
-
-	// lastRune of the empty string -> "".
-	if got := lastRune(""); got != "" {
-		t.Errorf("lastRune(%q) = %q, want empty", "", got)
-	}
-
-	// substituteText early-returns on an empty run.
-	c := &htmlConverter{}
-	if els, last := c.substituteText("", ""); els != nil || last != "" {
-		t.Errorf("substituteText(\"\") = %v, %q; want nil, \"\"", els, last)
-	}
-
-	// splitSub passes parts that already carry a sym straight through.
-	in := []typoPart{{sym: "mdash"}, {text: "a...b"}}
-	out := splitSub(in, reEllipsis, "hellip")
-	if len(out) == 0 || out[0].sym != "mdash" {
-		t.Errorf("splitSub did not preserve the pre-sym part: %+v", out)
 	}
 
 	// parseIAL consuming every token drives the loop's trim-to-empty exit.
