@@ -24,6 +24,11 @@ type spanParser struct {
 	// current tree plus its ancestors), mirroring kramdown's @tree/@stack. It lets
 	// parse_emphasis refuse to nest an :em inside an :em (or :strong inside :strong).
 	stack []ElementType
+	// openHTML counts, per lower-cased tag name, the raw inline HTML start tags seen
+	// but not yet balanced by a close tag. A close tag with a matching open passes
+	// through verbatim; a stray close tag (no open) is escaped as text, mirroring
+	// parse_span_html's close-tag branch.
+	openHTML map[string]int
 }
 
 // parseSpans converts a block's raw text into span elements.

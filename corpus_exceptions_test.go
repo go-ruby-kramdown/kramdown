@@ -13,20 +13,19 @@ package kramdown
 // should graduate out. Each bucket documents WHY it diverges.
 var corpusExceptions = map[string]bool{
 
-	// --- htmlparse (28): HTML-input parsing still blocked on the block/span content
-	// models, html_to_native mapping or span-level HTML. The raw content model (the
-	// default when :parse_block_html is off) is now ported — parse_raw_html builds a
-	// native element tree that the converter serialises byte-for-byte — so the pure
-	// raw-content cases (not_parsed, xml, textarea, invalid_html_2, html5_attributes)
-	// have graduated. These remaining ones need: parse_block_html (block content model
-	// + markdown attrs), html_to_native (ElementConverter), or span-level HTML
-	// (parse_span_html) — layered on in later clusters.
+	// --- htmlparse (23): HTML-input parsing still blocked on the markdown="…"
+	// attribute, the html_to_native mapping or span-level HTML. The raw content model
+	// and now the block/span content models (:parse_block_html — parse_block_html /
+	// parse_as_span / html_and_codeblocks / content_model/deflists / invalid_html_1
+	// have graduated) are ported. simple stays only on the entity-output divergence
+	// (its "&nbsp;" is emitted as the named entity, not the U+00A0 character — an
+	// entityout concern, below). These remaining ones need: the markdown="…" attribute,
+	// html_to_native (ElementConverter), or span-level HTML (parse_span_html) — layered
+	// on in later clusters.
 	"block/03_paragraph/with_html_to_native.text":    true,
 	"block/09_html/cdata_section.text":               true,
 	"block/09_html/comment.text":                     true,
-	"block/09_html/content_model/deflists.text":      true,
 	"block/09_html/content_model/tables.text":        true,
-	"block/09_html/html_and_codeblocks.text":         true,
 	"block/09_html/html_to_native/code.text":         true,
 	"block/09_html/html_to_native/comment.text":      true,
 	"block/09_html/html_to_native/emphasis.text":     true,
@@ -36,11 +35,8 @@ var corpusExceptions = map[string]bool{
 	"block/09_html/html_to_native/paragraph.text":    true,
 	"block/09_html/html_to_native/table_simple.text": true,
 	"block/09_html/html_to_native/typography.text":   true,
-	"block/09_html/invalid_html_1.text":              true,
 	"block/09_html/markdown_attr.text":               true,
 	"block/09_html/parse_as_raw.text":                true,
-	"block/09_html/parse_as_span.text":               true,
-	"block/09_html/parse_block_html.text":            true,
 	"block/09_html/simple.text":                      true,
 	"block/14_table/empty_tag_in_cell.text":          true,
 	"span/05_html/across_lines.text":                 true,
