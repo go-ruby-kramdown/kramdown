@@ -115,6 +115,10 @@ func (p *parser) parse() *Element {
 	lines = p.harvestDefinitions(lines)
 	root := newEl(ElRoot)
 	p.parseBlocks(lines, root)
+	// Deferred block-IAL resolution: now that every ALD definition (including any
+	// referenced only from earlier in the document) has been collected, apply the
+	// block IALs stashed on their target elements.
+	p.resolveBlockIALs(root)
 	return root
 }
 
@@ -729,34 +733,80 @@ func matchBlockIAL(line string) (string, bool) {
 
 // applyStandaloneIAL attaches a standalone {:...} line to the previous block, or
 // (if it is an ALD definition "{:id: ...}") records the ALD; a leading-position
-// IAL attaches to the following block. It returns the next index to parse from.
+// IAL attaches to the following block. The raw IAL is stored on the target element
+// (Options["block_ial"], accumulating) and resolved after the whole document is
+// parsed by resolveBlockIALs, so a forward reference to an ALD defined later in the
+// document resolves against the complete ALD table (kramdown defers
+// update_attr_with_ial to update_tree). It returns the next index to parse from.
 func (p *parser) applyStandaloneIAL(lines []string, i int, ial string, parent *Element) int {
-	// ALD definition: "{:name: attrs}".
+	// ALD definition: "{:name: attrs}". Multiple definitions of the same name
+	// accumulate (kramdown's @alds[name] ||= {} then parse_attribute_list merges),
+	// so later ids/keys override and classes/refs append.
 	if name, attrs, ok := splitALD(ial); ok {
-		p.aldDefs[name] = attrs
+		p.aldDefs[name] = joinIAL(p.aldDefs[name], attrs)
 		return i + 1
 	}
-	// Attach to previous non-blank block if one exists and is not separated by a
-	// blank line; otherwise buffer for the next block.
+	// Attach to the previous non-blank block if one exists and is not separated by a
+	// blank line. Consecutive trailing IALs all see that block as the last child and
+	// so accumulate onto it.
 	if n := len(parent.Children); n > 0 && parent.Children[n-1].Type != ElBlank {
-		applyIALToElement(parent.Children[n-1], ial, p.aldDefs)
+		attachBlockIAL(parent.Children[n-1], ial)
 		return i + 1
 	}
-	// Leading IAL: peek next block and attach after parsing it.
-	next := i + 1
-	// skip following blank lines
-	for next < len(lines) && strings.TrimSpace(lines[next]) == "" {
-		next++
+	// Leading position: accumulate this IAL and any immediately-consecutive
+	// standalone (non-ALD) block IALs, then attach the run to the block that
+	// immediately follows (kramdown's @block_ial, applied by the next new_block_el).
+	acc := ial
+	k := i + 1
+	for k < len(lines) {
+		b, ok := matchBlockIAL(lines[k])
+		if !ok {
+			break
+		}
+		if _, _, isALD := splitALD(b); isALD {
+			break
+		}
+		acc = joinIAL(acc, b)
+		k++
 	}
-	if next >= len(lines) {
-		return len(lines)
+	// A blank line, the end of input, or an ALD (whose own eob consumes the pending
+	// block IAL) clears the accumulated IAL — it attaches to nothing. Hand the line
+	// back to the block loop.
+	if k >= len(lines) || strings.TrimSpace(lines[k]) == "" {
+		return k
+	}
+	if _, ok := matchBlockIAL(lines[k]); ok {
+		return k
 	}
 	before := len(parent.Children)
-	// A preceding block IAL sets kramdown's @block_ial, which makes
-	// after_block_boundary? true for the block it decorates (so a table may follow).
-	consumed := p.parseOneBlock(lines, next, parent, true)
+	// A preceding block IAL makes after_block_boundary? true for the block it
+	// decorates (so a table may follow directly).
+	consumed := p.parseOneBlock(lines, k, parent, true)
 	if len(parent.Children) > before {
-		applyIALToElement(parent.Children[len(parent.Children)-1], ial, p.aldDefs)
+		attachBlockIAL(parent.Children[len(parent.Children)-1], acc)
 	}
-	return next + consumed
+	return k + consumed
+}
+
+// attachBlockIAL records raw as the deferred block IAL of el, accumulating onto any
+// already recorded (space-joined) so consecutive block IALs merge like kramdown's
+// single per-element options[:ial].
+func attachBlockIAL(el *Element, raw string) {
+	if existing, ok := el.Options["block_ial"].(string); ok {
+		el.Options["block_ial"] = joinIAL(existing, raw)
+		return
+	}
+	el.Options["block_ial"] = raw
+}
+
+// resolveBlockIALs walks the parsed tree and applies each element's deferred block
+// IAL (Options["block_ial"]) now that the ALD table is complete, mirroring
+// kramdown's update_tree/update_attr_with_ial post-parse pass.
+func (p *parser) resolveBlockIALs(el *Element) {
+	if raw, ok := el.Options["block_ial"].(string); ok && raw != "" {
+		applyIALToElement(el, raw, p.aldDefs)
+	}
+	for _, c := range el.Children {
+		p.resolveBlockIALs(c)
+	}
 }
