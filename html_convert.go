@@ -26,11 +26,12 @@ func (c *htmlConverter) convertHTMLNode(e *Element, indent int, parent *Element)
 	}
 }
 
-// htmlInner converts the children of e (kramdown's inner): the indent is increased by
-// the fixed two-space step and each child is dispatched with e as its parent.
+// htmlInner converts the raw-content children of e (kramdown's inner): each child is
+// dispatched one indentation level deeper with e as its parent. Used for the raw
+// content model, whose children are text / nested HTML nodes.
 func (c *htmlConverter) htmlInner(e *Element, indent int) string {
 	var b strings.Builder
-	ci := indent + 2
+	ci := indent + 1
 	for _, ch := range e.Children {
 		b.WriteString(c.convertHTMLNode(ch, ci, e))
 	}
@@ -44,28 +45,45 @@ func parentIsRawHTML(parent *Element) bool {
 		parent.Options["content_model"] == cmRaw
 }
 
-// convertHTMLElement ports convert_html_element's block, raw-content-model path: a
-// void element serialises self-closed, an element with body renders it inline between
-// the tags, and an empty non-void element renders as an empty tag pair. Indentation
-// and the trailing newline are suppressed when the parent is itself raw HTML. (The
-// block/span content-model shapes and the :span category arrive with those content
-// models in a later cluster.)
+// convertHTMLElement ports convert_html_element's block-category path across the three
+// content models. The body is rendered per model: :block reparses to nested Markdown
+// blocks (indented, on their own lines between the tags), :span span-parses its stored
+// raw text inline, and :raw serialises its text / nested-HTML children verbatim.
+// Indentation and the trailing newline are suppressed when the parent is itself raw
+// HTML, exactly as kramdown suppresses them for @stack.last being a raw element.
 func (c *htmlConverter) convertHTMLElement(e *Element, indent int, parent *Element) string {
-	res := c.htmlInner(e, indent)
+	cm, _ := e.Options["content_model"].(string)
+	var res string
+	switch cm {
+	case cmBlock:
+		var sb strings.Builder
+		c.convertChildren(e.Children, &sb, indent+1)
+		res = sb.String()
+	case cmSpan:
+		raw, _ := e.Options["raw"].(string)
+		res = c.renderRaw(raw, indent+1)
+	default:
+		res = c.htmlInner(e, indent)
+	}
 	attrs := htmlAttributes(e.Attrs)
-	var b strings.Builder
+	isClosed, _ := e.Options["is_closed"].(bool)
 	raw := parentIsRawHTML(parent)
+	var b strings.Builder
 	if !raw {
 		b.WriteString(ind(indent))
 	}
 	b.WriteString("<" + e.Value + attrs)
-	isClosed, _ := e.Options["is_closed"].(bool)
 	switch {
-	case isClosed:
+	case isClosed && cm == cmRaw:
 		b.WriteString(" />")
-	case res != "":
+	case res != "" && cm != cmBlock:
 		b.WriteString(">" + res + "</" + e.Value + ">")
+	case res != "":
+		b.WriteString(">\n" + strings.TrimSuffix(res, "\n") + "\n" + ind(indent) + "</" + e.Value + ">")
 	default:
+		// An empty body: a void element in the raw model already matched the self-closed
+		// case above, so every element reaching here is a non-void element with no
+		// content, rendered as an empty tag pair.
 		b.WriteString("></" + e.Value + ">")
 	}
 	if !raw {

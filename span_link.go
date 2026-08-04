@@ -353,14 +353,31 @@ func (sp *spanParser) tryAutolinkOrHTML() (*Element, int) {
 		return el, len(m[0])
 	}
 	if m := reHTMLSpan.FindStringSubmatch(s); m != nil {
+		tag := m[1]
+		name := strings.ToLower(strings.TrimPrefix(tag, "/"))
+		if i := strings.IndexAny(name, " \t/"); i >= 0 {
+			name = name[:i]
+		}
+		if tag[0] == '/' {
+			// A close tag balancing an earlier start tag passes through verbatim; a
+			// stray close tag with no matching open is invalid — kramdown warns and
+			// emits it as escaped text (parse_span_html's close-tag branch).
+			if sp.openHTML[name] > 0 {
+				sp.openHTML[name]--
+				el := newEl(ElRawHTMLSpan)
+				el.Value = "<" + tag + ">"
+				return el, len(m[0])
+			}
+			sp.p.warn("Found invalidly used HTML closing tag for '" + name + "'")
+			t := newEl(ElText)
+			t.Value = "<" + tag + ">"
+			return t, len(m[0])
+		}
+		selfClose := strings.HasSuffix(strings.TrimSpace(tag), "/")
 		// With parse_span_html disabled, a raw inline element's body is not parsed:
 		// swallow it up to the matching close tag and pass the whole element through
 		// verbatim (kramdown sets the element's content model to :raw in this case).
-		if tag := m[1]; !sp.p.opts.ParseSpanHTML && tag != "" && tag[0] != '/' && !strings.HasSuffix(tag, "/") {
-			name := tag
-			if i := strings.IndexAny(name, " \t"); i >= 0 {
-				name = name[:i]
-			}
+		if !sp.p.opts.ParseSpanHTML && !selfClose {
 			closeTag := "</" + name + ">"
 			if idx := strings.Index(s[len(m[0]):], closeTag); idx >= 0 {
 				whole := s[:len(m[0])+idx+len(closeTag)]
@@ -368,6 +385,12 @@ func (sp *spanParser) tryAutolinkOrHTML() (*Element, int) {
 				el.Value = whole
 				return el, len(whole)
 			}
+		}
+		if !selfClose && !htmlElementsWithoutBody[name] {
+			if sp.openHTML == nil {
+				sp.openHTML = map[string]int{}
+			}
+			sp.openHTML[name]++
 		}
 		el := newEl(ElRawHTMLSpan)
 		el.Value = "<" + m[1] + ">"

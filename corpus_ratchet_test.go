@@ -76,6 +76,8 @@ func applyCorpusOptions(o Options, text string) Options {
 			}
 		case "hard_wrap":
 			o.HardWrap = val == "true"
+		case "parse_block_html":
+			o.ParseBlockHTML = val == "true"
 		case "smart_quotes":
 			o.SmartQuotes = val != "false"
 		case "footnote_prefix":

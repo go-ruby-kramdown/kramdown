@@ -36,21 +36,90 @@ func TestRawHTMLFrontEnd(t *testing.T) {
 	}
 }
 
-// TestParseBlockHTMLBailouts exercises the two paths where the line-based block driver
-// declines to consume: a span-only element (never a block construct) and a construct
-// that ends mid-line (trailing content after the close tag), which is deferred to the
-// block/span content-model cluster.
+// TestParseBlockHTMLBailouts covers the block driver's decision paths: a span-only
+// element is never a block construct (declined), and a construct that ends mid-line
+// (trailing content after the close tag) commits the element and re-injects the line
+// remainder as its own block so the caller resumes on it.
 func TestParseBlockHTMLBailouts(t *testing.T) {
 	p := newParser("", DefaultOptions())
 	if n, ok := p.parseBlockHTML([]string{"<em>x</em>"}, 0, newEl(ElRoot)); ok || n != 0 {
 		t.Errorf("span element: got (%d,%v), want (0,false)", n, ok)
 	}
 	root := newEl(ElRoot)
-	if n, ok := p.parseBlockHTML([]string{"<div>x</div> y"}, 0, root); ok || n != 0 {
-		t.Errorf("mid-line end: got (%d,%v), want (0,false)", n, ok)
+	lines := []string{"<div>x</div> y"}
+	if n, ok := p.parseBlockHTML(lines, 0, root); !ok || n != 0 {
+		t.Errorf("mid-line end: got (%d,%v), want (0,true)", n, ok)
 	}
-	if len(root.Children) != 0 {
-		t.Errorf("mid-line bail must not commit children, got %d", len(root.Children))
+	if len(root.Children) != 1 || root.Children[0].Type != ElHTMLElement {
+		t.Errorf("mid-line end must commit the element, got %d children", len(root.Children))
+	}
+	if lines[0] != " y" {
+		t.Errorf("mid-line end must re-inject the remainder, got %q", lines[0])
+	}
+}
+
+// TestBlockContentModel checks the :parse_block_html block content model end to end:
+// a comment interrupting Markdown blocks inside an element, a stray non-matching close
+// tag falling through to a paragraph (escaped), and the surrounding indentation — all
+// against the kramdown 2.5.2 gem's output.
+func TestBlockContentModel(t *testing.T) {
+	o := DefaultOptions()
+	o.AutoIds = false
+	o.ParseBlockHTML = true
+	cases := []struct{ name, in, want string }{
+		{"comment_only", "<div>\n<!-- c -->\n</div>\n", "<div>\n  <!-- c -->\n</div>\n"},
+		{"comment_between", "<div>\ntext\n<!-- x -->\nmore\n</div>\n",
+			"<div>\n  <p>text</p>\n  <!-- x -->\n  <p>more</p>\n</div>\n"},
+		{"stray_close", "<div>\n</foo>\ntext\n</div>\n", "<div>\n  <p>&lt;/foo&gt;\ntext</p>\n</div>\n"},
+		{"empty", "<div></div>\n", "<div></div>\n"},
+		{"auto_close", "<div>\nfoo\n", "<div>\n  <p>foo</p>\n</div>\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ToHTML(tc.in, &o); got != tc.want {
+				t.Errorf("ToHTML(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestBlockContentModelHelpers exercises the block content model helper predicates'
+// edge branches directly, including the input-end (no trailing newline) region path.
+func TestBlockContentModelHelpers(t *testing.T) {
+	p := newParser("", DefaultOptions())
+	el := newEl(ElHTMLElement)
+	el.Value = "div"
+
+	// collectMarkdownRegion reaching end of input without a trailing newline.
+	hp := &htmlParser{p: p, sc: &htmlScanner{s: "foo\nbar"}}
+	if reg, adv := hp.collectMarkdownRegion(el); reg != "foo\nbar" || adv != 7 {
+		t.Errorf("collectMarkdownRegion = (%q,%d), want (\"foo\\nbar\",7)", reg, adv)
+	}
+
+	// matchCloseTagFor: span-element close, mismatched name, upper-case fold, OPT_SPACE
+	// prefix with trailing content, non-close text.
+	if _, ok := matchCloseTagFor("</span>", el); ok {
+		t.Error("span-element close must not match")
+	}
+	if _, ok := matchCloseTagFor("</foo>", el); ok {
+		t.Error("mismatched close must not match")
+	}
+	if n, ok := matchCloseTagFor("</DIV>", el); !ok || n != 6 {
+		t.Errorf("upper-case close: got (%d,%v), want (6,true)", n, ok)
+	}
+	if n, ok := matchCloseTagFor("  </div> x", el); !ok || n != 8 {
+		t.Errorf("indented close: got (%d,%v), want (8,true)", n, ok)
+	}
+	if _, ok := matchCloseTagFor("plain text", el); ok {
+		t.Error("non-close text must not match")
+	}
+
+	// boundaryAt: a column-0 comment and a plain line.
+	if !(&htmlParser{p: p, sc: &htmlScanner{s: "<!-- c -->\n"}}).boundaryAt(0, el) {
+		t.Error("column-0 comment must be a boundary")
+	}
+	if (&htmlParser{p: p, sc: &htmlScanner{s: "plain\n"}}).boundaryAt(0, el) {
+		t.Error("plain line must not be a boundary")
 	}
 }
 

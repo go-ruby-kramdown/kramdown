@@ -44,6 +44,12 @@ type Options struct {
 	// false via an inline "{::options parse_span_html=\"false\" /}" extension, a raw
 	// inline element's body is instead passed through verbatim.
 	ParseSpanHTML bool
+	// ParseBlockHTML, when true, gives every parsed block-level HTML element its
+	// native content model (kramdown's HTML_CONTENT_MODEL): a :block element reparses
+	// its body as Markdown blocks, a :span element span-parses its body, and a :raw
+	// element keeps its content verbatim. When false (kramdown's default) every block
+	// HTML element uses the raw content model. Mirrors kramdown's :parse_block_html.
+	ParseBlockHTML bool
 	// SyntaxHighlighter selects the code highlighter. "rouge" (kramdown's default)
 	// routes code blocks/spans through the pure-Go go-ruby-rouge lexers; any other
 	// value ("", "null", "minted", …) leaves them as plain <pre><code>.
