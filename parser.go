@@ -131,7 +131,7 @@ func (p *parser) parseBlocks(lines []string, parent *Element) {
 }
 
 var (
-	reATX        = regexp.MustCompile(`^(#{1,6})\s+(.*?)\s*$`)
+	reATX        = regexp.MustCompile(`^(#{1,6})[\t ]*([^ \t].*)$`)
 	reATXNoSpace = regexp.MustCompile(`^(#{1,6})$`)
 	reSetext     = regexp.MustCompile(`^(=+|-+)\s*$`)
 	reSetextPure = regexp.MustCompile(`^ {0,3}(=+|-+)[ \t]*$`)
@@ -167,8 +167,12 @@ func (p *parser) parseOneBlock(lines []string, i int, parent *Element) int {
 		return 1
 	}
 	if m := reATX.FindStringSubmatch(line); m != nil {
-		p.parseATXHeader(m, parent)
-		return 1
+		if p.parseATXHeader(m, parent) {
+			return 1
+		}
+		// The contents collapsed to nothing after stripping closing hashes (e.g.
+		// "# #"): kramdown then falls through to treat the line as a paragraph.
+		return p.parseParagraph(lines, i, parent)
 	}
 	if reATXNoSpace.MatchString(strings.TrimRight(line, " ")) {
 		// "#" alone is a paragraph in kramdown.
@@ -206,19 +210,24 @@ func (p *parser) parseOneBlock(lines []string, i int, parent *Element) int {
 	return p.parseParagraph(lines, i, parent)
 }
 
-// parseATXHeader handles "# Header {#id}" lines, stripping trailing "#"s and an
-// explicit {#id} IAL.
-func (p *parser) parseATXHeader(m []string, parent *Element) {
+// parseATXHeader handles "# Header {#id}" lines. It mirrors the gem: the contents
+// are right-stripped, an explicit trailing "{#id}" is extracted first, then a run
+// of unescaped trailing "#"s is removed. It reports false (no header emitted) when
+// the contents collapse to nothing, so the caller can fall back to a paragraph.
+func (p *parser) parseATXHeader(m []string, parent *Element) bool {
 	level := len(m[1])
-	text := m[2]
-	// Strip an explicit trailing {#id}.
+	text := rubyRstrip(m[2])
+	// Strip an explicit trailing {#id} (must be preceded by whitespace).
 	id := ""
 	if idm := reHeaderID.FindStringSubmatch(text); idm != nil {
 		id = idm[1]
-		text = text[:len(text)-len(idm[0])]
+		text = rubyRstrip(text[:len(text)-len(idm[0])])
 	}
-	// Strip a run of trailing closing #'s (optionally space-separated).
+	// Strip a trailing run of closing "#"s (kramdown: /(?<!\\)#+\z/ then rstrip).
 	text = stripClosingHashes(text)
+	if text == "" {
+		return false
+	}
 	h := newEl(ElHeader)
 	h.Options["level"] = level
 	h.Options["raw_text"] = text
@@ -226,30 +235,35 @@ func (p *parser) parseATXHeader(m []string, parent *Element) {
 		h.Options["explicit_id"] = id
 	}
 	parent.addChild(h)
+	return true
 }
 
-// stripClosingHashes removes a trailing " ###" closing-hash run from an ATX header
-// (kramdown keeps a "header #" with no leading space before the hashes literal,
-// but strips " #" / " ##").
+// rubyRstrip trims trailing whitespace the way Ruby's String#rstrip does.
+func rubyRstrip(s string) string {
+	return strings.TrimRight(s, " \t\n\r\f\v")
+}
+
+// stripClosingHashes reproduces kramdown's `text.sub!(/(?<!\\)#+\z/, ”) &&
+// text.rstrip!`: it removes the maximal trailing run of "#" whose first hash is not
+// backslash-escaped, then right-strips. A single escaped hash ("header \#") is
+// kept verbatim; the string is returned unchanged when it has no trailing hash.
 func stripClosingHashes(s string) string {
-	t := strings.TrimRight(s, " ")
-	// trailing hashes must be preceded by a space to be a closer
-	j := len(t)
-	for j > 0 && t[j-1] == '#' {
+	j := len(s)
+	for j > 0 && s[j-1] == '#' {
 		j--
 	}
-	if j == len(t) {
+	if j == len(s) {
 		return s // no trailing hashes
 	}
-	if j == 0 {
-		// all hashes: keep as-is (handled elsewhere)
-		return strings.TrimRight(s, " ")
+	start := j
+	if j > 0 && s[j-1] == '\\' {
+		// The first "#" of the run is escaped; only the hashes after it are removed.
+		start = j + 1
 	}
-	if t[j-1] == ' ' {
-		return strings.TrimRight(t[:j], " ")
+	if start >= len(s) {
+		return s // nothing removable (e.g. a lone escaped "\#")
 	}
-	// escaped or attached hash like "header #" already has space, "header#" stays
-	return strings.TrimRight(s, " ")
+	return rubyRstrip(s[:start])
 }
 
 // parseParagraph collects consecutive non-blank, non-block-starting lines into a
@@ -267,11 +281,14 @@ func (p *parser) parseParagraph(lines []string, start int, parent *Element) int 
 		if len(buf) > 0 && strings.TrimRight(line, " \t") == "^" {
 			break
 		}
-		// A Setext underline after at least one collected line makes a header. A
-		// pure run of "=" or "-" is a Setext underline even though a "-" run also
-		// matches the horizontal-rule pattern; in paragraph context the underline
+		// A Setext underline promotes the paragraph to a header only when it
+		// immediately follows a SINGLE content line at a block boundary — kramdown's
+		// SETEXT_HEADER_START matches one content line then the underline. A "="/"-"
+		// run after further lines is ordinary paragraph text (so a multi-line
+		// paragraph ending in "====" stays a paragraph). A pure run also matches the
+		// horizontal-rule pattern, but in this single-line position the underline
 		// wins (a real HR needs internal spaces, e.g. "- - -").
-		if len(buf) > 0 && reSetextPure.MatchString(line) {
+		if len(buf) == 1 && reSetextPure.MatchString(line) {
 			p.makeSetextHeader(buf, line, parent)
 			return i - start + 1
 		}

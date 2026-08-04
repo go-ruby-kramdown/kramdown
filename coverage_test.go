@@ -108,11 +108,17 @@ func TestHTMLBlockCommentMultiline(t *testing.T) {
 	eq(t, "<!-- line one\nline two -->\n", "<!-- line one\nline two -->\n")
 }
 
-// TestStripClosingHashesEdges covers the all-hashes header text and an attached
-// hash.
+// TestStripClosingHashesEdges covers ATX contents that collapse to nothing after
+// closing-hash stripping and an escaped closing hash.
 func TestStripClosingHashesEdges(t *testing.T) {
-	// A header that is only hashes after the level marker keeps them.
-	eq(t, "## ## \n", "<h2 id=\"section\">##</h2>\n")
+	// A header whose contents are only closing hashes strips to empty and so is
+	// rendered as a paragraph (matching the gem).
+	eq(t, "## ## \n", "<p>## ##</p>\n")
+	// A lone escaped hash is kept verbatim (the run is fully protected).
+	eq(t, "# \\#\n", "<h1 id=\"section\">#</h1>\n")
+	// Only the trailing hashes after an escaped one are stripped; the surviving
+	// escaped hash renders as a literal "#".
+	eq(t, "# a\\##\n", "<h1 id=\"a\">a#</h1>\n")
 }
 
 // TestParagraphContinuation covers kramdown's blank-line-delimited blocks: a

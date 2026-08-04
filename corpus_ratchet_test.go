@@ -149,19 +149,21 @@ func applyCorpusSHOptsLine(o *SyntaxHighlighterOpts, line string, subCtx *string
 	}
 }
 
-// resolveCorpusOptions builds the Options for a corpus case, starting from the
-// gem file-runner baseline (kramdown defaults with auto_ids off) and layering the
-// nearest options file.
+// resolveCorpusOptions builds the Options for a corpus case, mirroring the gem's
+// file runner: when an options file (a sibling <case>.options or a per-dir
+// `options`) exists, its YAML *replaces* the runner defaults, so unspecified keys
+// fall back to kramdown's own defaults (e.g. auto_ids on). Only when no options
+// file is present does the runner baseline {auto_ids: false, footnote_nr: 1} apply.
 func resolveCorpusOptions(textPath string) Options {
-	o := DefaultOptions()
-	o.AutoIds = false
 	base := strings.TrimSuffix(textPath, ".text")
 	if b, err := corpusFS.ReadFile(base + ".options"); err == nil {
-		return applyCorpusOptions(o, string(b))
+		return applyCorpusOptions(DefaultOptions(), string(b))
 	}
 	if b, err := corpusFS.ReadFile(path.Join(path.Dir(textPath), "options")); err == nil {
-		return applyCorpusOptions(o, string(b))
+		return applyCorpusOptions(DefaultOptions(), string(b))
 	}
+	o := DefaultOptions()
+	o.AutoIds = false
 	return o
 }
 
