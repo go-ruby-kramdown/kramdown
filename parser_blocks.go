@@ -38,6 +38,10 @@ func (p *parser) harvestDefinitions(lines []string) []string {
 			id := m[1]
 			var body []string
 			first := strings.TrimLeft(m[2], " \t")
+			// A definition whose marker line carries no inline content (the body opens
+			// on the following line) keeps a leading blank in kramdown, which the
+			// converter renders as a blank line inside the footnote's <li>.
+			leadingBlank := first == ""
 			if first != "" {
 				body = append(body, first)
 			}
@@ -63,6 +67,7 @@ func (p *parser) harvestDefinitions(lines []string) []string {
 				body = body[:len(body)-1]
 			}
 			fn := newEl(ElFootnoteDef)
+			fn.Options["leading_blank"] = leadingBlank
 			p.parseBlocks(body, fn)
 			// An IAL right after attaches to the definition (ignored for HTML here).
 			if i < len(lines) {
@@ -71,6 +76,12 @@ func (p *parser) harvestDefinitions(lines []string) []string {
 				}
 			}
 			p.footDefs[id] = fn
+			// kramdown records a footnote definition as a block-level end-of-block
+			// element, so a definition sitting between two blocks keeps them apart
+			// (e.g. two single-item lists must not merge into one loose list). Emit the
+			// same boundary marker used for link definitions: it renders nothing and,
+			// unlike a source "^" marker, does not loosen a list it closes.
+			out = append(out, defBoundaryMarker)
 			continue
 		}
 		// Link/image reference definition: "[id]: url "title"" (title may continue

@@ -176,7 +176,29 @@ var (
 	reBlockquote      = regexp.MustCompile(`^ {0,3}> ?(.*)$`)
 	reHeaderID        = regexp.MustCompile(`[ \t]+\{#([A-Za-z][\w:-]*)\}[ \t]*$`)
 	reDefMarker       = regexp.MustCompile(`^( {0,3})(:)(\s+)(.*)$`)
+	// reBlockMath matches a whole-line "$$…$$" block-math element (kramdown's
+	// BLOCK_MATH_START restricted to a single line): optional 0-3 space indent, an
+	// optional escaping backslash, the "$$"-delimited LaTeX, then only trailing space.
+	reBlockMath = regexp.MustCompile(`^ {0,3}(\\?)\$\$(.*)\$\$[ \t]*$`)
 )
+
+// tryBlockMath parses a single-line "$$…$$" math block when it stands alone at a
+// block boundary (the following line is blank or the input ends), mirroring
+// kramdown's parse_block_math. It returns nil for an escaped "\$$", for inline
+// "$$…$$" trailed by text, or when the next line is not a boundary, leaving those
+// to paragraph parsing (where they may be inline math or literal text).
+func (p *parser) tryBlockMath(lines []string, i int) (*Element, int) {
+	m := reBlockMath.FindStringSubmatch(lines[i])
+	if m == nil || m[1] != "" {
+		return nil, 0
+	}
+	if i+1 < len(lines) && strings.TrimSpace(lines[i+1]) != "" {
+		return nil, 0
+	}
+	el := newEl(ElMath)
+	el.Value = strings.TrimSpace(m[2])
+	return el, 1
+}
 
 // parseOneBlock dispatches on lines[i] to the correct block parser and returns the
 // number of input lines consumed (always >= 1). atBoundary reports whether the
@@ -226,6 +248,10 @@ func (p *parser) parseOneBlock(lines []string, i int, parent *Element, atBoundar
 	}
 	if reULItem.MatchString(line) || reOLItem.MatchString(line) {
 		return p.parseList(lines, i, parent)
+	}
+	if math, n := p.tryBlockMath(lines, i); math != nil {
+		parent.addChild(math)
+		return n
 	}
 	if atBoundary {
 		if tbl, n := p.tryTable(lines, i); tbl != nil {

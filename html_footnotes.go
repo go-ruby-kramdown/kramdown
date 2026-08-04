@@ -25,7 +25,11 @@ func (c *htmlConverter) appendFootnotes(body string) string {
 	} else {
 		b.WriteString("  <ol>\n")
 	}
-	for _, id := range c.footOrder {
+	// Index-based: rendering a footnote body may reference further footnotes
+	// (a footnote defined inside another footnote's definition), appending them to
+	// footOrder, and those must be emitted too. Re-read len each iteration.
+	for i := 0; i < len(c.footOrder); i++ {
+		id := c.footOrder[i]
 		def := c.footDefs[id]
 		b.WriteString(`    <li id="fn:` + c.doc.Opts.FootnotePrefix + id + `">` + "\n")
 		c.renderFootnoteBody(def, id, &b)
@@ -37,37 +41,80 @@ func (c *htmlConverter) appendFootnotes(body string) string {
 }
 
 // renderFootnoteBody renders a footnote's blocks at the footnote indent (3 levels),
-// appending the back-link(s) into the final paragraph (or a new paragraph when the
-// last block is not a paragraph).
+// appending the back-link(s) into the target paragraph/header (or a new paragraph
+// when there is no such target). kramdown injects the back-link into the last
+// paragraph when the note ends in one, or — with footnote_backlink_inline — into
+// the deepest last paragraph or header of the note's content.
 func (c *htmlConverter) renderFootnoteBody(def *Element, id string, b *strings.Builder) {
 	backlink := c.backlinks(id)
 	blocks := contentBlocks(def.Children)
 	var inner strings.Builder
-	// kramdown emits a leading blank line inside the <li> when the first block is
-	// not a simple paragraph (a code block, a quote, or an empty note).
-	if len(blocks) == 0 || blocks[0].Type != ElP {
+	// kramdown keeps a leading blank line inside the <li> when the definition's
+	// body opened on the line after the marker.
+	if lb, _ := def.Options["leading_blank"].(bool); lb {
 		inner.WriteString("\n")
 	}
-	lastIsP := len(blocks) > 0 && blocks[len(blocks)-1].Type == ElP
+	// The back-link target follows kramdown's footnote_content: the note's last
+	// block when it is a paragraph, or — with footnote_backlink_inline — the deepest
+	// last paragraph/header reached by descending into the final block.
+	var target *Element
+	if n := len(blocks); n > 0 && (blocks[n-1].Type == ElP || c.doc.Opts.FootnoteBacklinkInline) {
+		target = descendLastPHeader(blocks)
+	}
+	// Render every block at the footnote indent, blank-line-separated.
+	var bodyB strings.Builder
 	for i, blk := range blocks {
-		if i == len(blocks)-1 && lastIsP {
-			// Append the backlink (with its leading NBSP) inside the last paragraph.
-			inner.WriteString(ind(3) + "<p" + c.attrStr(blk) + ">")
-			inner.WriteString(c.renderSpans(blk, 3))
-			inner.WriteString(backlink)
-			inner.WriteString("</p>\n")
-			continue
-		}
-		c.convertBlock(blk, &inner, 3)
+		c.convertBlock(blk, &bodyB, 3)
 		if i < len(blocks)-1 {
-			inner.WriteString("\n")
+			bodyB.WriteString("\n")
 		}
 	}
-	if !lastIsP && backlink != "" {
-		// Backlink in its own trailing paragraph (no leading NBSP).
+	switch {
+	case backlink == "":
+		inner.WriteString(bodyB.String())
+	case target != nil:
+		// Inject the back-link(s), with their leading NBSP, just before the target
+		// element's closing tag (the last </p>/<hN> in the rendered body — the target
+		// is the last paragraph/header in document order).
+		inner.WriteString(insertBacklinkBeforeClose(bodyB.String(), backlink))
+	default:
+		// No paragraph/header target: the back-link goes in its own trailing
+		// paragraph, without the leading NBSP.
+		inner.WriteString(bodyB.String())
 		inner.WriteString(ind(3) + "<p>" + strings.TrimPrefix(backlink, " ") + "</p>\n")
 	}
 	b.WriteString(inner.String())
+}
+
+// descendLastPHeader returns the deepest last paragraph or header reachable by
+// repeatedly descending into the last content block, mirroring kramdown's descent
+// in footnote_content. It returns nil when the descent bottoms out at a block with
+// no paragraph/header (e.g. a code block or table).
+func descendLastPHeader(blocks []*Element) *Element {
+	children := blocks
+	for {
+		cb := contentBlocks(children)
+		if len(cb) == 0 {
+			return nil
+		}
+		last := cb[len(cb)-1]
+		if last.Type == ElP || last.Type == ElHeader {
+			return last
+		}
+		children = last.Children
+	}
+}
+
+// insertBacklinkBeforeClose inserts the back-link markup immediately before the
+// closing tag of the last paragraph or header in s (the descent target's element).
+func insertBacklinkBeforeClose(s, backlink string) string {
+	at := strings.LastIndex(s, "</p>")
+	for _, h := range []string{"</h1>", "</h2>", "</h3>", "</h4>", "</h5>", "</h6>"} {
+		if i := strings.LastIndex(s, h); i > at {
+			at = i
+		}
+	}
+	return s[:at] + backlink + s[at:]
 }
 
 // backlinks builds the "↩" reverse-footnote links, one per reference, with a
@@ -86,7 +133,7 @@ func (c *htmlConverter) backlinks(id string) string {
 		if i > 1 {
 			fnref = "fnref:" + name + ":" + strconv.Itoa(i-1)
 		}
-		b.WriteString("\u00a0") // kramdown separates back-links with a real NBSP
+		b.WriteString(" ") // kramdown separates back-links with a real NBSP
 		if i == 1 {
 			fmt.Fprintf(&b, `<a href="#%s" class="reversefootnote" role="doc-backlink">%s</a>`, fnref, text)
 		} else {

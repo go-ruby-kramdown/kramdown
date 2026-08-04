@@ -60,11 +60,6 @@ var knownFailing = map[string]bool{
 	"span/01_link/link_defs.text": true,
 	"span/01_link/reference.text": true,
 
-	// span/04_footnote (3)
-	"span/04_footnote/backlink_inline.text": true,
-	"span/04_footnote/definitions.text":     true,
-	"span/04_footnote/inside_footnote.text": true,
-
 	// span/abbreviations (2)
 	"span/abbreviations/abbrev.text":         true,
 	"span/abbreviations/abbrev_in_html.text": true,

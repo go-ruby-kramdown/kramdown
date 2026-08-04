@@ -112,7 +112,21 @@ func (c *htmlConverter) convertBlock(e *Element, b *strings.Builder, indent int)
 		if types, _ := e.Options["types"].([]string); rawForHTML(types) {
 			b.WriteString(e.Value + "\n")
 		}
+	case ElMath:
+		c.convertMath(e, b, indent)
 	}
+}
+
+// convertMath renders a block "$$…$$" math element the way kramdown's default
+// MathJax engine does: the bare "\[value\]" at column 0, or — when the element
+// carries IAL attributes — wrapped in a <div> at the current indent.
+func (c *htmlConverter) convertMath(e *Element, b *strings.Builder, indent int) {
+	inner := `\[` + escapeHTMLText(e.Value) + `\]`
+	if len(e.Attrs) == 0 {
+		b.WriteString(inner + "\n")
+		return
+	}
+	b.WriteString(ind(indent) + "<div" + c.attrStr(e) + ">" + inner + "\n</div>\n")
 }
 
 // convertStandaloneImage renders a single-image paragraph as an HTML5 figure,
