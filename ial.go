@@ -157,58 +157,10 @@ func ialHasRef(el *Element, ref string) bool {
 	return false
 }
 
-// htmlBlockTags is the set of block-level HTML tags whose opening line triggers a
-// raw HTML passthrough block.
-var htmlBlockTags = map[string]bool{
-	"address": true, "article": true, "aside": true, "blockquote": true,
-	"details": true, "dialog": true, "dd": true, "div": true, "dl": true,
-	"dt": true, "fieldset": true, "figcaption": true, "figure": true,
-	"footer": true, "form": true, "h1": true, "h2": true, "h3": true,
-	"h4": true, "h5": true, "h6": true, "header": true, "hgroup": true,
-	"hr": true, "li": true, "main": true, "nav": true, "ol": true, "p": true,
-	"pre": true, "section": true, "table": true, "ul": true, "script": true,
-	"style": true, "iframe": true, "noscript": true,
-}
-
-// reHTMLOpen matches a leading "<tag" or "</tag" or "<!--".
-var reHTMLOpen = regexp.MustCompile(`^ {0,3}</?([a-zA-Z][a-zA-Z0-9]*)`)
-
-// isHTMLBlockStart reports whether line opens a raw HTML block.
+// isHTMLBlockStart reports whether line, considered on its own, opens a block-level
+// raw HTML construct (a comment or a non-span-only start tag). It mirrors kramdown's
+// parse_block_html accept test for a single line; callers needing multi-line accuracy
+// (paragraph interruption, block dispatch) use parser.blockHTMLStart instead.
 func isHTMLBlockStart(line string) bool {
-	if strings.HasPrefix(strings.TrimLeft(line, " "), "<!--") {
-		return true
-	}
-	m := reHTMLOpen.FindStringSubmatch(line)
-	if m == nil {
-		return false
-	}
-	return htmlBlockTags[strings.ToLower(m[1])]
-}
-
-// parseHTMLBlock consumes a raw HTML block verbatim until a blank line (kramdown's
-// default html block handling for our supported subset) and stores it on an
-// ElHTMLBlock element.
-func (p *parser) parseHTMLBlock(lines []string, start int, parent *Element) int {
-	var buf []string
-	i := start
-	// HTML comment block: gather until "-->".
-	if strings.HasPrefix(strings.TrimLeft(lines[start], " "), "<!--") {
-		for i < len(lines) {
-			buf = append(buf, lines[i])
-			if strings.Contains(lines[i], "-->") {
-				i++
-				break
-			}
-			i++
-		}
-	} else {
-		for i < len(lines) && strings.TrimSpace(lines[i]) != "" {
-			buf = append(buf, lines[i])
-			i++
-		}
-	}
-	hb := newEl(ElHTMLBlock)
-	hb.Value = strings.Join(buf, "\n")
-	parent.addChild(hb)
-	return i - start
+	return htmlBlockStartsAt(line + "\n")
 }
