@@ -104,10 +104,23 @@ func (p *parser) parse() *Element {
 	return root
 }
 
+// defBoundaryMarker is an internal sentinel line emitted by the definition
+// pre-pass in place of a harvested link/abbreviation/footnote definition that is
+// not followed by a blank line. It renders nothing but records that the following
+// block is NOT after a block boundary — kramdown leaves an ":eob" element with a
+// non-nil value (:link_def/…) there, so a table candidate directly beneath such a
+// definition is not recognised as a table. The NUL byte cannot occur in source.
+const defBoundaryMarker = "\x00kramdown-def-boundary\x00"
+
 // parseBlocks parses a sequence of source lines into block elements appended to
 // parent.
 func (p *parser) parseBlocks(lines []string, parent *Element) {
 	i := 0
+	// atBoundary tracks kramdown's after_block_boundary?: true at the start of the
+	// stream, right after a blank run, or after an EOB "^" marker; false after any
+	// real block or a non-boundary definition marker. Only table recognition
+	// consults it (a table must sit at a block boundary).
+	atBoundary := true
 	for i < len(lines) {
 		// Consume blank lines as a single ElBlank separator.
 		if strings.TrimSpace(lines[i]) == "" {
@@ -117,16 +130,29 @@ func (p *parser) parseBlocks(lines []string, parent *Element) {
 			}
 			parent.addChild(newEl(ElBlank))
 			i = j
+			atBoundary = true
+			continue
+		}
+		// A definition-boundary marker: emit nothing, but the following block is not
+		// at a block boundary.
+		if lines[i] == defBoundaryMarker {
+			atBoundary = false
+			i++
 			continue
 		}
 		// Standalone block IAL ({:...}) on its own line attaches to the previous or
 		// next block.
 		if ial, ok := matchBlockIAL(lines[i]); ok {
 			i = p.applyStandaloneIAL(lines, i, ial, parent)
+			atBoundary = false
 			continue
 		}
-		consumed := p.parseOneBlock(lines, i, parent)
+		// An EOB "^" marker leaves the following block at a boundary (eob with a nil
+		// value); every other block clears it.
+		isEOB := strings.TrimRight(lines[i], " \t") == "^"
+		consumed := p.parseOneBlock(lines, i, parent, atBoundary)
 		i += consumed
+		atBoundary = isEOB
 	}
 }
 
@@ -153,8 +179,10 @@ var (
 )
 
 // parseOneBlock dispatches on lines[i] to the correct block parser and returns the
-// number of input lines consumed (always >= 1).
-func (p *parser) parseOneBlock(lines []string, i int, parent *Element) int {
+// number of input lines consumed (always >= 1). atBoundary reports whether the
+// block sits at a block boundary (kramdown's after_block_boundary?), which a table
+// candidate requires.
+func (p *parser) parseOneBlock(lines []string, i int, parent *Element, atBoundary bool) int {
 	line := lines[i]
 
 	if strings.TrimRight(line, " \t") == "^" {
@@ -199,9 +227,11 @@ func (p *parser) parseOneBlock(lines []string, i int, parent *Element) int {
 	if reULItem.MatchString(line) || reOLItem.MatchString(line) {
 		return p.parseList(lines, i, parent)
 	}
-	if tbl, n := p.tryTable(lines, i); tbl != nil {
-		parent.addChild(tbl)
-		return n
+	if atBoundary {
+		if tbl, n := p.tryTable(lines, i); tbl != nil {
+			parent.addChild(tbl)
+			return n
+		}
 	}
 	if dl, n := p.tryDefinitionList(lines, i); dl != nil {
 		parent.addChild(dl)
@@ -597,7 +627,9 @@ func (p *parser) applyStandaloneIAL(lines []string, i int, ial string, parent *E
 		return len(lines)
 	}
 	before := len(parent.Children)
-	consumed := p.parseOneBlock(lines, next, parent)
+	// A preceding block IAL sets kramdown's @block_ial, which makes
+	// after_block_boundary? true for the block it decorates (so a table may follow).
+	consumed := p.parseOneBlock(lines, next, parent, true)
 	if len(parent.Children) > before {
 		applyIALToElement(parent.Children[len(parent.Children)-1], ial, p.aldDefs)
 	}
