@@ -102,8 +102,9 @@ func (c *htmlConverter) convertBlock(e *Element, b *strings.Builder, indent int)
 		c.convertDL(e, b, indent)
 	case ElTable:
 		c.convertTable(e, b, indent)
-	case ElHTMLBlock:
-		b.WriteString(pad + e.Value + "\n")
+	case ElHTMLElement, ElXMLComment, ElXMLPI, ElText:
+		// A raw-HTML front-end node at block position (parent is the document root).
+		b.WriteString(c.convertHTMLNode(e, indent, nil))
 	case ElComment:
 		b.WriteString(pad + "<!-- " + e.Value + " -->\n")
 	case ElRaw:

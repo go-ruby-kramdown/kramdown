@@ -251,8 +251,10 @@ func (p *parser) parseOneBlock(lines []string, i int, parent *Element, atBoundar
 	if n, ok := p.parseBlockExtension(lines, i, parent); ok {
 		return n
 	}
-	if isHTMLBlockStart(line) {
-		return p.parseHTMLBlock(lines, i, parent)
+	if p.blockHTMLStart(lines, i) {
+		if n, ok := p.parseBlockHTML(lines, i, parent); ok {
+			return n
+		}
 	}
 	if reFence.MatchString(line) {
 		return p.parseFencedCode(lines, i, parent)
@@ -424,7 +426,7 @@ func (p *parser) makeSetextHeader(buf []string, underline string, parent *Elemen
 // begins its own value segment), so a list marker never needs to interrupt a
 // paragraph here.
 func (p *parser) startsNewBlock(lines []string, i int) bool {
-	return isHTMLBlockStart(lines[i])
+	return p.blockHTMLStart(lines, i)
 }
 
 // parseComment handles the {::comment}…{:/comment} extension, emitting an

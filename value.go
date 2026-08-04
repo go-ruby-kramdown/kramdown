@@ -64,8 +64,6 @@ const (
 	ElTr
 	// ElTd is a table cell (a <td> or, in a thead, a <th>).
 	ElTd
-	// ElHTMLBlock is a passthrough block of raw HTML; Value holds it verbatim.
-	ElHTMLBlock
 	// ElComment is a {::comment} extension block; Value holds the comment text.
 	ElComment
 	// ElRaw is a {::nomarkdown} extension block; Value holds the verbatim content
@@ -103,6 +101,20 @@ const (
 	ElAbbr
 	// ElRawHTMLSpan is raw inline HTML passed through verbatim in Value.
 	ElRawHTMLSpan
+
+	// --- raw-HTML front-end elements (kramdown's Parser::Html tree) ---
+
+	// ElHTMLElement is a parsed raw-HTML element (kramdown's :html_element). Value is
+	// the tag name, Attrs the parsed HTML attributes, Children the parsed body, and
+	// Options carry "content_model" ("raw"/"block"/"span"/"default"), "category"
+	// ("block"/"span") and "is_closed" (bool).
+	ElHTMLElement
+	// ElXMLComment is a parsed HTML comment (kramdown's :xml_comment). Value holds the
+	// verbatim "<!--…-->" text; Options["category"] is "block" or "span".
+	ElXMLComment
+	// ElXMLPI is a parsed processing instruction (kramdown's :xml_pi). Value holds the
+	// verbatim "<?…?>" text; Options["category"] is "block" or "span".
+	ElXMLPI
 )
 
 // Attr is one HTML attribute (name/value), kept ordered as kramdown emits them.
