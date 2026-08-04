@@ -39,6 +39,11 @@ type Options struct {
 	// instead of appending it to (or after) only a top-level trailing paragraph.
 	// Mirrors kramdown's :footnote_backlink_inline option (default false).
 	FootnoteBacklinkInline bool
+	// ParseSpanHTML, when true (kramdown's default), parses the Markdown content of
+	// a raw inline HTML element (so "<span>*x*</span>" emphasises its body). Set
+	// false via an inline "{::options parse_span_html=\"false\" /}" extension, a raw
+	// inline element's body is instead passed through verbatim.
+	ParseSpanHTML bool
 	// SyntaxHighlighter selects the code highlighter. "rouge" (kramdown's default)
 	// routes code blocks/spans through the pure-Go go-ruby-rouge lexers; any other
 	// value ("", "null", "minted", …) leaves them as plain <pre><code>.
@@ -75,6 +80,7 @@ func DefaultOptions() Options {
 		HardWrap:          false,
 		FootnoteNr:        1,
 		FootnoteBacklink:  "&#8617;",
+		ParseSpanHTML:     true,
 		SyntaxHighlighter: "rouge",
 	}
 }
