@@ -14,24 +14,15 @@ package kramdown
 // Grouped by kramdown feature; each cluster is closed in its own PR.
 var knownFailing = map[string]bool{
 
-	// block/11_ial (2)
-	// nested: kramdown parses the "<div>…</div>" raw block as an HTML element and
-	// injects the leading/trailing IAL's class/id into the opening tag (and reparses
-	// a "markdown=\"1\"" body), which needs the HTML-element block front-end this
-	// port renders verbatim instead. simple: needs deferred, nested ALD-reference
-	// resolution with kramdown's update_attr_with_ial ordering (refs resolved first;
-	// multiple "{:name: …}" ALD definitions accumulated rather than overwritten), a
-	// list terminated by a following standalone block IAL (its trailing indented
-	// lines becoming separate IAL-decorated code blocks), and accumulation of
-	// consecutive leading block IALs — core attribute-model/list reworks out of
-	// scope here.
-	"block/11_ial/nested.text": true,
+	// block/11_ial (1)
+	// simple: needs deferred, nested ALD-reference resolution with kramdown's
+	// update_attr_with_ial ordering (refs resolved first; multiple "{:name: …}" ALD
+	// definitions accumulated rather than overwritten), a list terminated by a
+	// following standalone block IAL (its trailing indented lines becoming separate
+	// IAL-decorated code blocks), and accumulation of consecutive leading block IALs —
+	// core attribute-model/list reworks out of scope here. (nested graduated with the
+	// block content model + markdown-attribute front-end.)
 	"block/11_ial/simple.text": true,
-
-	// block/12_extension (1)
-	// options: needs parse_block_html/parse_span_html (the HTML5 front-end).
-	// (options3, which needed the rouge token markup, now passes via the go-ruby-rouge wiring.)
-	"block/12_extension/options.text": true,
 
 	// block/14_table (1)
 	// simple: one row uses an unclosed inline <em> HTML element that kramdown
@@ -41,16 +32,8 @@ var knownFailing = map[string]bool{
 	"block/14_table/simple.text": true,
 
 	// encoding.text (1)
-	// The table-cell UTF-8 double-encoding bug is fixed; two divergences remain and
-	// need the HTML5 block front-end (parse_block_html) this port lacks: inline raw
-	// HTML attribute quote normalization (<span id='x'> -> <span id="x">) and the
-	// block-level markdown="1" attribute (<p markdown='1'>…</p> reparses its body).
+	// One divergence remains — inline raw HTML attribute quote normalization inside a
+	// paragraph (<span id='x'> -> <span id="x">) — which needs the span-level HTML
+	// front-end (parse_span_html). The block-level markdown="1" reparse now matches.
 	"encoding.text": true,
-
-	// span/abbreviations (1)
-	// abbrev_in_html: the two <svg> blocks are byte-identical except a markdown="span"
-	// attribute on one <text> element, which must strip the attribute and span-parse
-	// (and abbreviate) only that element's body. That requires the HTML5 block
-	// front-end (parse_block_html with markdown attributes) this port lacks.
-	"span/abbreviations/abbrev_in_html.text": true,
 }

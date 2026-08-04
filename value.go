@@ -162,5 +162,17 @@ func (e *Element) getAttr(name string) (string, bool) {
 	return "", false
 }
 
+// deleteAttr removes attribute name, returning its value and whether it was present.
+func (e *Element) deleteAttr(name string) (string, bool) {
+	for i := range e.Attrs {
+		if e.Attrs[i].Name == name {
+			v := e.Attrs[i].Val
+			e.Attrs = append(e.Attrs[:i], e.Attrs[i+1:]...)
+			return v, true
+		}
+	}
+	return "", false
+}
+
 // addChild appends c to e's children.
 func (e *Element) addChild(c *Element) { e.Children = append(e.Children, c) }

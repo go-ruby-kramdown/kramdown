@@ -221,8 +221,24 @@ func (hp *htmlParser) handleKramdownHTMLTag(el, tree *Element) {
 			cm = cmRaw
 		}
 	}
-	// NOTE: script/style have their verbatim-body (handle_raw_html_tag) special case
-	// and markdown="…" attribute handling are layered on in later clusters.
+	// A markdown="…" attribute overrides the content model regardless of the
+	// :parse_block_html option (kramdown's HTML_MARKDOWN_ATTR_MAP): "0" forces raw,
+	// "1" the element's native model, "span"/"block" that model. The attribute is
+	// always removed from the element; an unrecognised value leaves the model as-is.
+	if mv, ok := el.deleteAttr("markdown"); ok {
+		switch mv {
+		case "0":
+			cm = cmRaw
+		case "1":
+			cm = contentModelFor(el.Value)
+		case "span":
+			cm = cmSpan
+		case "block":
+			cm = cmBlock
+		}
+	}
+	// NOTE: script/style have their verbatim-body (handle_raw_html_tag) special case,
+	// layered on in a later cluster.
 	if cm == cmBlock {
 		hp.sc.scanRE(reTrailingWS)
 	}
