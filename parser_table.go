@@ -115,9 +115,17 @@ func (p *parser) tryTable(lines []string, start int) (*Element, int) {
 	if !strings.Contains(lines[start], "|") {
 		return nil, 0
 	}
-	// The table block runs to the next blank line.
+	// The table block runs to the next blank line or standalone block IAL. A
+	// trailing "{:…}" line is NOT part of the table; kramdown ends the table there
+	// and lets the block IAL attach to the table as a separate element (so
+	// "| … |\n{:.cls}" yields <table class="cls">).
 	end := start
 	for end < len(lines) && strings.TrimSpace(lines[end]) != "" {
+		if end > start {
+			if _, ok := matchBlockIAL(lines[end]); ok {
+				break
+			}
+		}
 		end++
 	}
 	block := lines[start:end]
