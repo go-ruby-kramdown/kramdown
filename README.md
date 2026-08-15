@@ -1,3 +1,11 @@
+> [!WARNING]
+> **DEPRECATED — this repository is a stale duplicate, kept in place (not archived) for reference.**
+>
+> The maintained source of truth is **[github.com/go-kramdown/kramdown](https://github.com/go-kramdown/kramdown)**.
+> All consumers (rbgo, jekyll, wasmbox) depend on `github.com/go-kramdown/kramdown`; do not add new dependencies on this `go-ruby-kramdown` path.
+
+---
+
 <div align="center">
 
 <img src="https://raw.githubusercontent.com/go-ruby-kramdown/brand/main/social/go-ruby-kramdown-kramdown.png" alt="go-ruby-kramdown/kramdown" width="640">
