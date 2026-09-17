@@ -16,3 +16,5 @@ github.com/go-ruby-rouge/rouge v0.0.0-20260820220643-132f87988ed8 h1:qCeoXdXwR9G
 github.com/go-ruby-rouge/rouge v0.0.0-20260820220643-132f87988ed8/go.mod h1:CewaHBYro19JJoSmfZphddQ9+mO3/giM3KaKBcOtgv4=
 github.com/go-ruby-rouge/rouge v0.0.0-20260901145152-f34064e99843 h1:bFjffzwfaUHAB/HhTr5O/FnFFjdYcGN6NScOlgCGxiM=
 github.com/go-ruby-rouge/rouge v0.0.0-20260901145152-f34064e99843/go.mod h1:Ss+TYScT8alQZxDuTEznjZcpai/JTLSeUSAT9CZuiV4=
+github.com/go-ruby-rouge/rouge v0.0.0-20260916102035-56018192b70c h1:3dL1ynh+dVMo2fzz0MaeJN6jnzWw2PPbqc5L1PaFIGs=
+github.com/go-ruby-rouge/rouge v0.0.0-20260916102035-56018192b70c/go.mod h1:Ss+TYScT8alQZxDuTEznjZcpai/JTLSeUSAT9CZuiV4=
