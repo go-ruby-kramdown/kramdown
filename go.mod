@@ -2,9 +2,9 @@ module github.com/go-ruby-kramdown/kramdown
 
 go 1.27.1
 
-require github.com/go-ruby-rouge/rouge v0.0.0-20260916102035-56018192b70c
+require github.com/go-ruby-rouge/rouge v0.0.0-20261112141018-3fa9ee84c95b
 
 require (
-	github.com/go-regexp/engine v0.1.3 // indirect
-	github.com/go-ruby-regexp/regexp v0.0.0-20260831115702-e14375e92d68 // indirect
+	github.com/go-regexp/engine v0.4.1 // indirect
+	github.com/go-ruby-regexp/regexp v0.2.1 // indirect
 )
